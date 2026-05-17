@@ -1,6 +1,7 @@
 const https = require("https");
 
-const AGENT = "30100;1.15.232-15154";
+const AGENT = "30100;1.228.1-15480;";
+const DID = "3C417201548B2E3B";
 const UA = "okhttp/4.9.0";
 
 function collectArticles(node, out) {
@@ -28,6 +29,7 @@ module.exports = async (req, res) => {
       "User-Agent": UA,
       "x-client-version": "15.0",
       "x-picnic-agent": AGENT,
+      "x-picnic-did": DID,
       "x-picnic-auth": auth || ""
     }
   };
