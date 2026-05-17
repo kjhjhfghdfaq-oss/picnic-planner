@@ -103,7 +103,7 @@ button.danger { background: #c00; margin-top: 8px; }
       </div>
       <div id="cart-items"><div class="empty">Laden...</div></div>
     </div>
-    <button class="secondary" onclick="loadCart()">Vernieuwen</button>
+    <button class="secondary" onclick="loadCart()">Vernieuwen</button><button class="secondary" onclick="debugCart()">Debug: toon ruwe data</button>
   </div>
 </div>
 
@@ -269,6 +269,14 @@ function doPlan() {
   document.getElementById('plan-actions').style.display='block';
 }
 
+async function debugCart() {
+  const res = await fetch(`/api/cart-get?auth=${encodeURIComponent(authKey)}`);
+  const text = await res.text();
+  const data = JSON.parse(text);
+  alert(JSON.stringify(Object.keys(data)) + "\n\nEerste level keys. Check console voor meer.");
+  console.log(data);
+}
+
 async function doAddToCart() {
   if (!mealPlan||!authKey) return;
   const btn = document.getElementById('btn-add-cart');
@@ -303,3 +311,4 @@ async function doAddToCart() {
 </script>
 </body>
 </html>
+
