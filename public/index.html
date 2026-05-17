@@ -351,6 +351,7 @@ async function doAddToCart() {
     try{
       const res=await fetch(`/api/search?q=${encodeURIComponent(ing)}&auth=${encodeURIComponent(authKey)}`);
       const data=await res.json();
+      console.log('SEARCH RAW', ing, data);
       const items=data?.items||[];
       let product=null;
       for(const item of items){if((item.type==='SINGLE_ARTICLE'||item.type==='ARTICLE')&&item.id){product=item;break;}}
