@@ -1,6 +1,9 @@
 ﻿const https = require("https");
 
 module.exports = async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") { res.status(200).end(); return; }
   const { key, secret } = req.body || {};
   const body = JSON.stringify({ key, secret, device_id: "picnic-planner-web" });
@@ -19,7 +22,7 @@ module.exports = async (req, res) => {
       const auth = resp.headers["x-picnic-auth"] || null;
       let d = "";
       resp.on("data", c => d += c);
-      resp.on("end", () => resolve({ status: resp.statusCode, auth, body: d }));
+      resp.on("end", () => resolve({ status: resp.statusCode, auth }));
     });
     r.on("error", reject);
     r.write(body);
