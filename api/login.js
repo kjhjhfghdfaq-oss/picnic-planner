@@ -8,7 +8,7 @@ module.exports = async (req, res) => {
   if (req.method === "OPTIONS") { res.status(200).end(); return; }
   const { key, secret_plain } = req.body || {};
   const secret = crypto.createHash("md5").update(secret_plain || "").digest("hex");
-  const body = JSON.stringify({ key, secret, device_id: "picnic-planner-web" });
+  const body = JSON.stringify({ key, secret, client_id: "30112", device_id: "picnic-planner-web" });
   const options = {
     hostname: "storefront-prod.nl.picnicinternational.com",
     path: "/api/15/user/login",
