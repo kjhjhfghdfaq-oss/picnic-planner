@@ -200,7 +200,7 @@ async function doLogin() {
     const data = await res.json();
     if (!data.auth) throw new Error('Inloggen mislukt. Controleer je gegevens.');
     authKey = data.auth;
-    const r2fa = await send2FA(); console.log("2fa result:", JSON.stringify(r2fa));
+    const r2fa = showStep('main'); switchTab('plan'); console.log("2fa result:", JSON.stringify(r2fa));
   } catch(e) {
     setStatus('login-status', e.message, 'error');
   } finally {
@@ -337,6 +337,7 @@ async function doAddToCart() {
 </script>
 </body>
 </html>
+
 
 
 
