@@ -4,13 +4,16 @@ const AGENT = "30100;1.228.1-15480;";
 const DID = "3C417201548B2E3B";
 const UA = "okhttp/4.9.0";
 
-function collectArticles(node, out) {
+function collectArticles(node, out, typeCounts) {
   if (!node || typeof node !== "object") return;
-  if (Array.isArray(node)) { for (const n of node) collectArticles(n, out); return; }
-  if (node.id && (node.type === "SINGLE_ARTICLE" || node.type === "ARTICLE")) {
+  if (Array.isArray(node)) { for (const n of node) collectArticles(n, out, typeCounts); return; }
+  if (typeof node.type === "string") {
+    typeCounts[node.type] = (typeCounts[node.type] || 0) + 1;
+  }
+  if (node.id && typeof node.type === "string" && /ARTICLE|PRODUCT|TILE/i.test(node.type)) {
     out.push(node);
   }
-  for (const k of Object.keys(node)) collectArticles(node[k], out);
+  for (const k of Object.keys(node)) collectArticles(node[k], out, typeCounts);
 }
 
 module.exports = async (req, res) => {
@@ -45,10 +48,11 @@ module.exports = async (req, res) => {
   });
 
   let items = [];
+  const typeCounts = {};
   try {
     const parsed = JSON.parse(data.body);
-    collectArticles(parsed, items);
+    collectArticles(parsed, items, typeCounts);
   } catch (_) {}
 
-  res.status(data.status).json({ status: data.status, items, raw: data.body });
+  res.status(data.status).json({ status: data.status, items, typeCounts });
 };
