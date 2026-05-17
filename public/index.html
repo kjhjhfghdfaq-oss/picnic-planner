@@ -167,11 +167,11 @@ async function doLogin() {
   btn.disabled = true; btn.textContent = 'Bezig...';
   setStatus('login-status','');
   try {
-    const secret = await hashPassword(p);
+    const secret = p;
     const res = await fetch('/api/login', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({key:u, secret})
+      body:JSON.stringify({key:u, secret_plain:secret})
     });
     const data = await res.json();
     if (!data.auth) throw new Error('Inloggen mislukt. Controleer je gegevens.');

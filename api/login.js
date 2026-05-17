@@ -1,11 +1,13 @@
 ﻿const https = require("https");
+const crypto = require("crypto");
 
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") { res.status(200).end(); return; }
-  const { key, secret } = req.body || {};
+  const { key, secret_plain } = req.body || {};
+  const secret = crypto.createHash("md5").update(secret_plain || "").digest("hex");
   const body = JSON.stringify({ key, secret, device_id: "picnic-planner-web" });
   const options = {
     hostname: "storefront-prod.nl.picnicinternational.com",
