@@ -25,13 +25,13 @@ module.exports = async (req, res) => {
         const auth = resp.headers["x-picnic-auth"] || null;
         let d = "";
         resp.on("data", c => d += c);
-        resp.on("end", () => resolve({ status: resp.statusCode, auth }));
+        resp.on("end", () => resolve({ status: resp.statusCode, auth, body: d }));
       });
       r.on("error", reject);
       r.write(body);
       r.end();
     });
-    res.status(200).json({ auth: result.auth, status: result.status });
+    res.status(200).json({ auth: result.auth, status: result.status, debug: result.body });
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
