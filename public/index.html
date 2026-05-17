@@ -215,12 +215,7 @@ async function send2FA() {
     body:JSON.stringify({auth: authKey})
   });
   const data = await res.json();
-  if (data.status===200) {
-    showStep('2fa');
-  } else {
-    showStep('main');
-    switchTab('plan');
-  }
+  showStep('2fa');
 }
 
 async function do2FA() {
@@ -342,3 +337,4 @@ async function doAddToCart() {
 </script>
 </body>
 </html>
+
