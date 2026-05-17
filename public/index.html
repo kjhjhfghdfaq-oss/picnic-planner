@@ -1,0 +1,278 @@
+﻿<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Picnic Maaltijdplanner</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto; padding: 1.5rem; background: #f5f5f5; color: #111; }
+h1 { font-size: 1.3rem; font-weight: 600; margin-bottom: 1.5rem; }
+.card { background: white; border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+label { font-size: 13px; color: #666; display: block; margin-bottom: 4px; margin-top: 12px; }
+input, select { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+button { width: 100%; padding: 12px; background: #111; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 500; cursor: pointer; margin-top: 1rem; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+button.secondary { background: white; color: #111; border: 1px solid #ddd; margin-top: 8px; }
+.status { font-size: 13px; margin-top: 8px; min-height: 18px; }
+.error { color: #c00; }
+.success { color: #080; }
+.meal { background: #f9f9f9; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+.meal-day { font-size: 12px; color: #888; }
+.meal-name { font-weight: 500; margin: 2px 0; }
+.meal-ing { font-size: 13px; color: #666; margin-top: 4px; }
+.meal-cost { font-size: 12px; color: #999; margin-top: 4px; }
+.product-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+.product-row:last-child { border-bottom: none; }
+.found { color: green; }
+.notfound { color: #c00; }
+.warning { background: #fff8e1; border: 1px solid #ffe082; border-radius: 8px; padding: 10px 12px; font-size: 13px; color: #7a6000; margin-bottom: 12px; }
+#step-plan, #step-result, #step-cart { display: none; }
+</style>
+</head>
+<body>
+<h1>🥗 Picnic Maaltijdplanner</h1>
+
+<div id="step-login">
+  <div class="card">
+    <div class="warning">Je gegevens worden alleen lokaal gebruikt en nooit opgeslagen.</div>
+    <label>E-mailadres</label>
+    <input type="email" id="username" placeholder="jouw@email.com" />
+    <label>Wachtwoord</label>
+    <input type="password" id="password" placeholder="••••••••" />
+    <button id="btn-login" onclick="doLogin()">Inloggen bij Picnic</button>
+    <div class="status" id="login-status"></div>
+  </div>
+</div>
+
+<div id="step-plan">
+  <div class="card">
+    <div class="row">
+      <div><label>Personen</label><input type="number" id="persons" value="2" min="1" max="10" /></div>
+      <div><label>Maaltijden</label><input type="number" id="meals" value="5" min="1" max="7" /></div>
+    </div>
+    <label>Budget (€)</label>
+    <input type="number" id="budget" value="60" />
+    <label>Dieetwensen</label>
+    <select id="diet">
+      <option value="alles">Geen voorkeur</option>
+      <option value="vegetarisch">Vegetarisch</option>
+      <option value="mediterraan">Mediterraan</option>
+      <option value="snel">Snelle maaltijden (&lt;30 min)</option>
+    </select>
+    <button id="btn-plan" onclick="doPlan()">Maaltijden genereren</button>
+  </div>
+</div>
+
+<div id="step-result">
+  <div id="meal-list"></div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:14px;color:#666;">Geschat totaal</span>
+      <span id="total-amount" style="font-size:22px;font-weight:600;"></span>
+    </div>
+  </div>
+  <button id="btn-cart" onclick="doAddToCart()">Toevoegen aan Picnic-winkelwagen</button>
+  <button class="secondary" onclick="doPlan()">Ander plan genereren</button>
+  <div class="status" id="cart-status"></div>
+</div>
+
+<div id="step-cart">
+  <div class="card">
+    <div id="cart-result-list"></div>
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid #f0f0f0;">
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;"><span style="color:#666;">Toegevoegd</span><strong id="added-count"></strong></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;"><span style="color:#666;">Niet gevonden</span><strong id="not-found-count"></strong></div>
+    </div>
+  </div>
+  <button onclick="window.open('https://picnic.app','_blank')">Bekijk winkelwagen op Picnic</button>
+  <button class="secondary" onclick="showStep('plan')">Nieuw maaltijdplan</button>
+</div>
+
+<script>
+const BASE = '';
+let authKey = null;
+let mealPlan = null;
+
+const RECEPTEN = {
+  alles: [
+    {name:"Spaghetti bolognese",ingredients:["spaghetti","gehakt rund","tomatensaus","ui","knoflook","wortel"],cost:8},
+    {name:"Kipfilet met groenten en rijst",ingredients:["kipfilet","rijst","paprika","courgette","olijfolie"],cost:9},
+    {name:"Zalm met aardappelen en broccoli",ingredients:["zalm filet","aardappelen","broccoli","citroen","boter"],cost:12},
+    {name:"Stamppot boerenkool met rookworst",ingredients:["aardappelen","boerenkool","rookworst","mosterd","spekjes"],cost:7},
+    {name:"Nasi goreng",ingredients:["rijst","ei","kipfilet","sambal","ketjap","prei"],cost:8},
+    {name:"Tomatensoep met brood",ingredients:["tomatensoep","brood","roomboter","peterselie"],cost:5},
+    {name:"Gehaktballen met puree en jus",ingredients:["gehakt","aardappelen","jus","boter","melk"],cost:9},
+    {name:"Pasta pesto met kip",ingredients:["pasta","pesto","kipfilet","pijnboompitten","parmezaan"],cost:10},
+    {name:"Ovenschotel met gehakt en kaas",ingredients:["gehakt","aardappelen","kaas geraspte","ui","tomatensaus"],cost:9},
+    {name:"Kippensoep met vermicelli",ingredients:["kippenbouillon","kipfilet","vermicelli","wortel","selderij"],cost:7},
+  ],
+  vegetarisch: [
+    {name:"Pasta primavera",ingredients:["pasta","courgette","paprika","cherry tomaten","parmezaan","olijfolie"],cost:7},
+    {name:"Groentecurry met rijst",ingredients:["rijst","kokosmelk","curry pasta","kikkererwten","spinazie","ui"],cost:8},
+    {name:"Quiche met broccoli en kaas",ingredients:["quiche deeg","broccoli","kaas geraspte","ei","slagroom","ui"],cost:9},
+    {name:"Linzensoep",ingredients:["rode linzen","tomaten","ui","knoflook","komijn","bouillon"],cost:5},
+    {name:"Gevulde paprika met quinoa",ingredients:["paprika","quinoa","feta","olijven","tomaten","peterselie"],cost:8},
+    {name:"Omelet met champignons",ingredients:["ei","champignons","ui","kaas geraspte","peterselie","boter"],cost:6},
+    {name:"Vegetarische lasagne",ingredients:["lasagne vellen","ricotta","spinazie","tomatensaus","mozzarella"],cost:9},
+    {name:"Tagliatelle met paddenstoelensaus",ingredients:["tagliatelle","champignons","slagroom","knoflook","peterselie"],cost:8},
+  ],
+  mediterraan: [
+    {name:"Griekse salade met pita",ingredients:["komkommer","tomaat","feta","olijven","rode ui","pita brood"],cost:7},
+    {name:"Gegrilde kip met couscous",ingredients:["kipfilet","couscous","citroen","olijfolie","munt","komkommer"],cost:10},
+    {name:"Visstew met tomaat",ingredients:["kabeljauw","tomaten","paprika","knoflook","olijfolie","peterselie"],cost:12},
+    {name:"Hummus met groenten en flatbread",ingredients:["hummus","wortel","komkommer","flatbread","paprika"],cost:6},
+    {name:"Gegrilde groenten met halloumi",ingredients:["halloumi","courgette","aubergine","paprika","olijfolie","citroen"],cost:10},
+    {name:"Shakshuka",ingredients:["ei","tomatensaus","paprika","ui","knoflook","komijn","feta"],cost:7},
+    {name:"Tabbouleh met gegrilde kip",ingredients:["bulgur","peterselie","tomaat","citroen","kipfilet","munt"],cost:9},
+    {name:"Moussaka",ingredients:["aubergine","gehakt lam","aardappelen","bechamelsaus","tomatensaus"],cost:11},
+  ],
+  snel: [
+    {name:"Roerei met toast",ingredients:["ei","brood","boter","tomaat","zout en peper"],cost:4},
+    {name:"Wraps met kip en groenten",ingredients:["wrap tortilla","kipfilet","sla","tomaat","komkommer","yoghurt dressing"],cost:8},
+    {name:"Noedelsoep met ei",ingredients:["noedels","kippenbouillon","ei","bosui","sojasaus"],cost:5},
+    {name:"Tuna pasta",ingredients:["pasta","tonijn blik","kappertjes","citroen","olijfolie","peterselie"],cost:6},
+    {name:"Pitabroodje met falafel",ingredients:["pita brood","falafel","hummus","sla","tomaat","yoghurtsaus"],cost:7},
+    {name:"Gebakken rijst met ei",ingredients:["rijst","ei","sojasaus","bosui","sesam olie","knoflook"],cost:5},
+    {name:"Bruschetta met tomaat",ingredients:["brood","tomaat","knoflook","basilicum","olijfolie","balsamico"],cost:5},
+  ]
+};
+
+const DAGEN = ["Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag","Zondag"];
+
+function showStep(s) {
+  ['login','plan','result','cart'].forEach(x => {
+    document.getElementById('step-'+x).style.display = 'none';
+  });
+  document.getElementById('step-'+s).style.display = 'block';
+}
+
+function setStatus(id, msg, type) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = 'status ' + (type||'');
+}
+
+async function hashPassword(pw) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pw));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+async function doLogin() {
+  const u = document.getElementById('username').value.trim();
+  const p = document.getElementById('password').value;
+  if (!u||!p) { setStatus('login-status','Vul beide velden in','error'); return; }
+  const btn = document.getElementById('btn-login');
+  btn.disabled = true; btn.textContent = 'Bezig...';
+  setStatus('login-status','');
+  try {
+    const secret = await hashPassword(p);
+    const res = await fetch('/api/login', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({key:u, secret})
+    });
+    const data = await res.json();
+    if (!data.auth) throw new Error('Inloggen mislukt. Controleer je gegevens.');
+    authKey = data.auth;
+    setStatus('login-status','Ingelogd!','success');
+    setTimeout(()=>showStep('plan'), 600);
+  } catch(e) {
+    setStatus('login-status', e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Inloggen bij Picnic';
+  }
+}
+
+function doPlan() {
+  const n = parseInt(document.getElementById('meals').value) || 5;
+  const budget = parseInt(document.getElementById('budget').value) || 60;
+  const diet = document.getElementById('diet').value;
+  const pool = diet === 'alles'
+    ? [...RECEPTEN.alles, ...RECEPTEN.mediterraan, ...RECEPTEN.snel]
+    : [...(RECEPTEN[diet]||[]), ...RECEPTEN.alles];
+  const budgetPerMaaltijd = budget / n;
+  const geschikt = pool.filter(r => r.cost <= budgetPerMaaltijd * 1.3);
+  const bron = geschikt.length >= n ? geschikt : pool;
+  const shuffled = [...bron].sort(()=>Math.random()-0.5);
+  const gekozen = [];
+  const gebruiktNamen = new Set();
+  for (const r of shuffled) {
+    if (!gebruiktNamen.has(r.name)) {
+      gekozen.push(r);
+      gebruiktNamen.add(r.name);
+      if (gekozen.length >= n) break;
+    }
+  }
+  mealPlan = gekozen.map((r,i) => ({
+    day: DAGEN[i],
+    name: r.name,
+    ingredients: r.ingredients,
+    estimatedCost: r.cost
+  }));
+  renderMealPlan();
+  showStep('result');
+}
+
+function renderMealPlan() {
+  const persons = parseInt(document.getElementById('persons').value) || 2;
+  document.getElementById('meal-list').innerHTML = mealPlan.map(m=>`
+    <div class="meal">
+      <div class="meal-day">${m.day}</div>
+      <div class="meal-name">${m.name}</div>
+      <div class="meal-ing">${m.ingredients.join(', ')}</div>
+      <div class="meal-cost">± €${(m.estimatedCost * (persons/2)).toFixed(2)} voor ${persons} personen</div>
+    </div>
+  `).join('');
+  const persons2 = parseInt(document.getElementById('persons').value) || 2;
+  const total = mealPlan.reduce((s,m)=>s+(m.estimatedCost*(persons2/2)),0);
+  document.getElementById('total-amount').textContent = '€'+total.toFixed(2);
+}
+
+async function doAddToCart() {
+  if (!mealPlan||!authKey) return;
+  const btn = document.getElementById('btn-cart');
+  btn.disabled = true; btn.textContent = 'Bezig...';
+  setStatus('cart-status','Producten zoeken en toevoegen...');
+  const ingredients = [...new Set(mealPlan.flatMap(m=>m.ingredients))];
+  const results = [];
+  for (const ing of ingredients) {
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(ing)}&auth=${encodeURIComponent(authKey)}`);
+      const data = await res.json();
+      const items = data?.items||[];
+      let product = null;
+      for (const item of items) {
+        if ((item.type==='SINGLE_ARTICLE'||item.type==='ARTICLE')&&item.id){product=item;break;}
+      }
+      if (product?.id) {
+        await fetch(`/api/cart?auth=${encodeURIComponent(authKey)}`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({product_id:product.id,count:1})
+        });
+        results.push({name:ing,found:true,productName:product.name||ing});
+      } else {
+        results.push({name:ing,found:false});
+      }
+    } catch(e) {
+      results.push({name:ing,found:false});
+    }
+    await new Promise(r=>setTimeout(r,200));
+  }
+  document.getElementById('cart-result-list').innerHTML = results.map(r=>`
+    <div class="product-row">
+      <span>${r.found?(r.productName||r.name):r.name}</span>
+      <span class="${r.found?'found':'notfound'}">${r.found?'✓ toegevoegd':'– niet gevonden'}</span>
+    </div>
+  `).join('');
+  document.getElementById('added-count').textContent = results.filter(r=>r.found).length + ' producten';
+  document.getElementById('not-found-count').textContent = results.filter(r=>!r.found).length + ' producten';
+  setStatus('cart-status','');
+  showStep('cart');
+  btn.disabled = false; btn.textContent = 'Toevoegen aan Picnic-winkelwagen';
+}
+</script>
+</body>
+</html>
