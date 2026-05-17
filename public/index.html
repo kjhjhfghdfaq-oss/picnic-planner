@@ -67,6 +67,7 @@ button.secondary { background: white; color: #111; border: 1px solid #ddd; margi
   <div class="tabs">
     <div class="tab active" id="tabn-plan" onclick="switchTab('plan')">Maaltijden</div>
     <div class="tab" id="tabn-cart" onclick="switchTab('cart')">Winkelwagen</div>
+    <div class="tab" onclick="doLogout()" style="flex:0 0 auto;padding:8px 12px;">Uitloggen</div>
   </div>
 
   <div id="tab-plan">
@@ -113,8 +114,32 @@ button.secondary { background: white; color: #111; border: 1px solid #ddd; margi
 </div>
 
 <script>
+const AUTH_STORAGE_KEY = 'picnic_auth';
 let authKey = null;
 let mealPlan = null;
+
+function saveAuth(t) { try { localStorage.setItem(AUTH_STORAGE_KEY, t); } catch(_){} }
+function loadAuth() { try { return localStorage.getItem(AUTH_STORAGE_KEY); } catch(_){ return null; } }
+function clearAuth() { try { localStorage.removeItem(AUTH_STORAGE_KEY); } catch(_){} }
+
+function doLogout() {
+  clearAuth();
+  authKey = null;
+  location.reload();
+}
+
+async function tryResumeSession() {
+  const t = loadAuth();
+  if (!t) return false;
+  try {
+    const res = await fetch(`/api/cart-get?auth=${encodeURIComponent(t)}`);
+    if (res.status < 200 || res.status >= 300) { clearAuth(); return false; }
+    authKey = t;
+    showStep('main');
+    switchTab('plan');
+    return true;
+  } catch(_) { clearAuth(); return false; }
+}
 
 const RECEPTEN = {
   alles: [
@@ -242,6 +267,7 @@ async function do2FA() {
     const data = await res.json();
     if (data.auth) authKey = data.auth;
     if (data.status>=200 && data.status<300) {
+      if (authKey) saveAuth(authKey);
       showStep('main');
       switchTab('plan');
     } else {
@@ -343,6 +369,8 @@ async function doAddToCart() {
   btn.disabled=false; btn.textContent='Toevoegen aan winkelwagen';
   setTimeout(()=>switchTab('cart'),1000);
 }
+
+tryResumeSession();
 </script>
 </body>
 </html>
