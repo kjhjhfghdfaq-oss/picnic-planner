@@ -12,7 +12,9 @@ module.exports = async (req, res) => {
     method: "GET",
     headers: {
       "Content-Type": "application/json; charset=UTF-8",
+      "User-Agent": "okhttp/4.9.0",
       "x-client-version": "15.0",
+      "x-picnic-agent": "30100;1.15.232-15154",
       "x-picnic-auth": auth || ""
     }
   };
