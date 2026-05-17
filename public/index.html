@@ -355,12 +355,14 @@ async function doAddToCart() {
       let product=null;
       for(const item of items){if((item.type==='SINGLE_ARTICLE'||item.type==='ARTICLE')&&item.id){product=item;break;}}
       if(product?.id){
-        await fetch(`/api/cart?auth=${encodeURIComponent(authKey)}`,{
+        const cr = await fetch(`/api/cart?auth=${encodeURIComponent(authKey)}`,{
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body:JSON.stringify({product_id:product.id,count:1})
         });
-        added++;
+        const ct = await cr.text();
+        if (cr.status>=200 && cr.status<300) { added++; }
+        else { notFound++; console.warn('cart add failed', ing, product.id, cr.status, ct); }
       } else { notFound++; }
     } catch(e){ notFound++; }
     await new Promise(r=>setTimeout(r,200));
