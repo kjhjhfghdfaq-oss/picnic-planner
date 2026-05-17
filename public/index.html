@@ -208,7 +208,7 @@ async function doLogin() {
     });
     const d2fa = await r2fa.json();
     if (d2fa.auth) authKey = d2fa.auth;
-    if (d2fa.status !== 200) throw new Error('2FA aanvragen mislukt (status '+d2fa.status+'): '+(d2fa.body||''));
+    if (d2fa.status < 200 || d2fa.status >= 300) throw new Error('2FA aanvragen mislukt (status '+d2fa.status+'): '+(d2fa.body||''));
     showStep('2fa');
   } catch(e) {
     setStatus('login-status', e.message, 'error');
@@ -241,7 +241,7 @@ async function do2FA() {
     });
     const data = await res.json();
     if (data.auth) authKey = data.auth;
-    if (data.status===200) {
+    if (data.status>=200 && data.status<300) {
       showStep('main');
       switchTab('plan');
     } else {
