@@ -285,29 +285,31 @@ async function loadCart() {
   try {
     const res = await fetch(`/api/cart-get?auth=${encodeURIComponent(authKey)}`);
     const data = await res.json();
-    console.log('CART GET', data);
-    const items = data?.items || [];
-    if (items.length===0) {
+    const lines = data?.items || [];
+    if (lines.length===0) {
       document.getElementById('cart-items').innerHTML='<div class="empty">Je winkelwagen is leeg</div>';
       document.getElementById('cart-total').textContent='';
       document.getElementById('cart-title').textContent='Winkelwagen';
       return;
     }
-    let total=0, html='';
-    for (const item of items) {
-      const name = item.name||item.id;
-      const qty = item.decorators?.find(d=>d.type==='QUANTITY')?.quantity||1;
-      const price = item.display_price?(item.display_price/100):0;
-      total += price*qty;
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    let html='';
+    for (const line of lines) {
+      const art = (line.items && line.items[0]) || {};
+      const name = art.name || line.id;
+      const unit = art.unit_quantity ? ` <span style="color:#999;font-size:12px;">${esc(art.unit_quantity)}</span>` : '';
+      const qty = (line.items && line.items.length) || 1;
+      const price = (line.display_price||0)/100;
       html+=`<div class="cart-item">
-        <span class="cart-item-name">${name}</span>
+        <span class="cart-item-name">${esc(name)}${unit}</span>
         <span class="cart-item-qty">${qty}x</span>
         <span class="cart-item-price">€${price.toFixed(2)}</span>
       </div>`;
     }
+    const totalCents = data?.total_price ?? data?.checkout_total_price ?? 0;
     document.getElementById('cart-items').innerHTML=html;
-    document.getElementById('cart-total').textContent='€'+total.toFixed(2);
-    document.getElementById('cart-title').textContent=`Winkelwagen (${items.length})`;
+    document.getElementById('cart-total').textContent='€'+(totalCents/100).toFixed(2);
+    document.getElementById('cart-title').textContent=`Winkelwagen (${data?.total_count ?? lines.length})`;
   } catch(e) {
     document.getElementById('cart-items').innerHTML='<div class="empty error">Fout: '+e.message+'</div>';
   }
