@@ -4,16 +4,22 @@ const AGENT = "30100;1.228.1-15480;";
 const DID = "3C417201548B2E3B";
 const UA = "okhttp/4.9.0";
 
-function collectArticles(node, out, typeCounts) {
+function collectArticles(node, out) {
   if (!node || typeof node !== "object") return;
-  if (Array.isArray(node)) { for (const n of node) collectArticles(n, out, typeCounts); return; }
-  if (typeof node.type === "string") {
-    typeCounts[node.type] = (typeCounts[node.type] || 0) + 1;
+  if (Array.isArray(node)) { for (const n of node) collectArticles(n, out); return; }
+  if (node.type === "SELLING_UNIT_TILE" && node.sellingUnit && node.sellingUnit.id) {
+    const su = node.sellingUnit;
+    out.push({
+      id: su.id,
+      name: su.name,
+      display_price: su.display_price,
+      unit_quantity: su.unit_quantity,
+      image_id: su.image_id,
+      type: "SELLING_UNIT"
+    });
+    return;
   }
-  if (node.type === "SELLING_UNIT_TILE") {
-    out.push(node);
-  }
-  for (const k of Object.keys(node)) collectArticles(node[k], out, typeCounts);
+  for (const k of Object.keys(node)) collectArticles(node[k], out);
 }
 
 module.exports = async (req, res) => {
@@ -48,11 +54,10 @@ module.exports = async (req, res) => {
   });
 
   let items = [];
-  const typeCounts = {};
   try {
     const parsed = JSON.parse(data.body);
-    collectArticles(parsed, items, typeCounts);
+    collectArticles(parsed, items);
   } catch (_) {}
 
-  res.status(data.status).json({ status: data.status, items, typeCounts });
+  res.status(data.status).json({ status: data.status, items });
 };
