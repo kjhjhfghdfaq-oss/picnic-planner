@@ -17,16 +17,20 @@ module.exports = async (req, res) => {
       "Content-Length": Buffer.byteLength(body)
     }
   };
-  const data = await new Promise((resolve, reject) => {
-    const r = https.request(options, resp => {
-      const auth = resp.headers["x-picnic-auth"] || null;
-      let d = "";
-      resp.on("data", c => d += c);
-      resp.on("end", () => resolve({ status: resp.statusCode, auth }));
+  try {
+    const result = await new Promise((resolve, reject) => {
+      const r = https.request(options, resp => {
+        const auth = resp.headers["x-picnic-auth"] || null;
+        let d = "";
+        resp.on("data", c => d += c);
+        resp.on("end", () => resolve({ status: resp.statusCode, auth }));
+      });
+      r.on("error", reject);
+      r.write(body);
+      r.end();
     });
-    r.on("error", reject);
-    r.write(body);
-    r.end();
-  });
-  res.status(data.status).json({ auth: data.auth, status: data.status });
+    res.status(200).json({ auth: result.auth, status: result.status });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
 };
