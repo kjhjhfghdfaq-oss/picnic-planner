@@ -200,7 +200,16 @@ async function doLogin() {
     const data = await res.json();
     if (!data.auth) throw new Error('Inloggen mislukt. Controleer je gegevens.');
     authKey = data.auth;
-    const r2fa = showStep('main'); switchTab('plan'); console.log("2fa result:", JSON.stringify(r2fa));
+    setStatus('login-status','SMS-code aanvragen...');
+    const r2fa = await fetch('/api/2fa',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({auth: authKey})
+    });
+    const d2fa = await r2fa.json();
+    if (d2fa.auth) authKey = d2fa.auth;
+    if (d2fa.status !== 200) throw new Error('2FA aanvragen mislukt (status '+d2fa.status+'): '+(d2fa.body||''));
+    showStep('2fa');
   } catch(e) {
     setStatus('login-status', e.message, 'error');
   } finally {
