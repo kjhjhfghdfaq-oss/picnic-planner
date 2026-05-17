@@ -10,7 +10,7 @@ function collectArticles(node, out, typeCounts) {
   if (typeof node.type === "string") {
     typeCounts[node.type] = (typeCounts[node.type] || 0) + 1;
   }
-  if (node.id && typeof node.type === "string" && /ARTICLE|PRODUCT|TILE/i.test(node.type)) {
+  if (node.type === "SELLING_UNIT_TILE") {
     out.push(node);
   }
   for (const k of Object.keys(node)) collectArticles(node[k], out, typeCounts);
