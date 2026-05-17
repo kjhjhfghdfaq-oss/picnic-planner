@@ -285,6 +285,7 @@ async function loadCart() {
   try {
     const res = await fetch(`/api/cart-get?auth=${encodeURIComponent(authKey)}`);
     const data = await res.json();
+    console.log('CART GET', data);
     const items = data?.items || [];
     if (items.length===0) {
       document.getElementById('cart-items').innerHTML='<div class="empty">Je winkelwagen is leeg</div>';
