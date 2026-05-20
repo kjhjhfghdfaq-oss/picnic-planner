@@ -36,7 +36,7 @@ button.secondary { background: white; color: #111; border: 1px solid #ddd; margi
 .meal-cost { font-size: 12px; color: #999; margin-top: 4px; }
 .empty { text-align: center; color: #888; font-size: 14px; padding: 2rem 0; }
 #step-2fa, #step-main { display: none; }
-#tab-plan, #tab-cart { display: none; }
+#tab-plan, #tab-cart, #tab-recepten { display: none; }
 </style>
 </head>
 <body>
@@ -68,6 +68,7 @@ button.secondary { background: white; color: #111; border: 1px solid #ddd; margi
   <div class="tabs">
     <div class="tab active" id="tabn-plan" onclick="switchTab('plan')">Maaltijden</div>
     <div class="tab" id="tabn-cart" onclick="switchTab('cart')">Winkelwagen</div>
+    <div class="tab" id="tabn-recepten" onclick="switchTab('recepten')">Recepten</div>
     <div class="tab" onclick="doLogout()" style="flex:0 0 auto;padding:8px 12px;">Uitloggen</div>
   </div>
 
@@ -114,6 +115,10 @@ button.secondary { background: white; color: #111; border: 1px solid #ddd; margi
       <div id="cart-items"><div class="empty">Laden...</div></div>
     </div>
     <button class="secondary" onclick="loadCart()">Vernieuwen</button>
+  </div>
+
+  <div id="tab-recepten">
+    <div id="recepten-list"><div class="empty">Laden...</div></div>
   </div>
 </div>
 
@@ -197,13 +202,14 @@ function showStep(s) {
 }
 
 function switchTab(t) {
-  ['plan','cart'].forEach(x => {
+  ['plan','cart','recepten'].forEach(x => {
     document.getElementById('tab-'+x).style.display='none';
     document.getElementById('tabn-'+x).classList.remove('active');
   });
   document.getElementById('tab-'+t).style.display='block';
   document.getElementById('tabn-'+t).classList.add('active');
   if (t==='cart') loadCart();
+  if (t==='recepten') loadRecepten();
 }
 
 function setStatus(id, msg, type) {
@@ -371,6 +377,7 @@ async function doPlan() {
       estimatedCost: m.estimatedCost || 0
     }));
     renderMealPlan(mealPlan, persons);
+    saveMealPlan(mealPlan, persons, budget, diet);
     setStatus('plan-status', '');
   } catch (e) {
     setStatus('plan-status', 'AI niet beschikbaar, lokaal plan gebruikt', 'warning');
@@ -423,6 +430,52 @@ async function doAddToCart() {
   setStatus('cart-status',`✓ ${added} toegevoegd, ${notFound} niet gevonden`,'success');
   btn.disabled=false; btn.textContent='Toevoegen aan winkelwagen';
   setTimeout(()=>switchTab('cart'),1000);
+}
+
+async function saveMealPlan(meals, persons, budget, diet) {
+  try {
+    await fetch('/api/save-meal-plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ persons, budget, diet, meals })
+    });
+  } catch (_) {}
+}
+
+async function loadRecepten() {
+  const list = document.getElementById('recepten-list');
+  list.innerHTML = '<div class="empty">Laden...</div>';
+  try {
+    const res = await fetch('/api/get-meal-plans');
+    const data = await res.json();
+    const plans = data.plans || [];
+    if (plans.length === 0) {
+      list.innerHTML = '<div class="empty">Nog geen plannen bewaard</div>';
+      return;
+    }
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    list.innerHTML = plans.map(p => {
+      const d = new Date(p.date);
+      const dateStr = d.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      const meta = [p.persons ? p.persons + ' pers.' : '', p.budget ? '€' + p.budget : ''].filter(Boolean).join(' · ');
+      return `<div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <strong style="font-size:14px;">${esc(dateStr)}</strong>
+          <span style="font-size:12px;color:#888;">${esc(meta)}</span>
+        </div>
+        ${(p.meals || []).map(m => `<details style="margin-bottom:4px;">
+          <summary style="cursor:pointer;font-weight:500;font-size:14px;padding:6px 0;border-bottom:1px solid #f0f0f0;">${esc(m.day ? m.day + ' — ' : '')}${esc(m.name)}</summary>
+          <div style="padding:8px 0 4px;">
+            <div class="meal-ing">${(m.ingredients || []).map(esc).join(', ')}</div>
+            ${m.preparation ? `<div class="meal-ing" style="margin-top:6px;color:#444;">${esc(m.preparation)}</div>` : ''}
+            ${m.nutritionNote ? `<div class="meal-cost" style="color:#5a7a5a;margin-top:4px;">✓ ${esc(m.nutritionNote)}</div>` : ''}
+          </div>
+        </details>`).join('')}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    list.innerHTML = '<div class="empty error">Fout bij laden: ' + e.message + '</div>';
+  }
 }
 
 tryResumeSession();

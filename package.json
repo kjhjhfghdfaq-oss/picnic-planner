@@ -1,1 +1,1 @@
-{"name":"picnic-planner","version":"1.0.0","engines":{"node":"24.x"},"dependencies":{"@anthropic-ai/sdk":"^0.55.0"}}
+{"name":"picnic-planner","version":"1.0.0","engines":{"node":"24.x"},"dependencies":{"@anthropic-ai/sdk":"^0.55.0","@vercel/kv":"^1.0.0"}}
