@@ -325,18 +325,32 @@ async function loadCart() {
   }
 }
 
+function splitIngredients(ingredients, searchTerms) {
+  const terms = (searchTerms || []).map(t => t.toLowerCase());
+  const shopping = [], pantry = [];
+  for (const ing of ingredients) {
+    const ingL = ing.toLowerCase();
+    terms.some(t => ingL.includes(t)) ? shopping.push(ing) : pantry.push(ing);
+  }
+  return { shopping, pantry };
+}
+
 function renderMealPlan(meals, persons) {
   const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  document.getElementById('meal-list').innerHTML = meals.map(m => `
-    <div class="meal">
+  document.getElementById('meal-list').innerHTML = meals.map(m => {
+    const { shopping, pantry } = splitIngredients(m.ingredients, m.searchTerms);
+    return `<div class="meal">
       <div class="meal-day">${esc(m.day)}</div>
       <div class="meal-name">${esc(m.name)}</div>
-      <div class="meal-ing">${m.ingredients.map(esc).join(', ')}</div>
+      <ul style="margin:6px 0 0 16px;padding:0;font-size:13px;color:#444;">
+        ${shopping.map(i => `<li>${esc(i)}</li>`).join('')}
+      </ul>
+      ${pantry.length ? `<div style="margin-top:6px;font-size:12px;color:#999;">Waarschijnlijk in huis: ${pantry.map(esc).join(', ')}</div>` : ''}
       ${m.preparation ? `<div class="meal-ing" style="margin-top:6px;color:#444;">${esc(m.preparation)}</div>` : ''}
       ${m.nutritionNote ? `<div class="meal-cost" style="color:#5a7a5a;">✓ ${esc(m.nutritionNote)}</div>` : ''}
       <div class="meal-cost">± €${(m.estimatedCost * (persons / 2)).toFixed(2)} voor ${persons} personen</div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
   const total = meals.reduce((s, m) => s + (m.estimatedCost * (persons / 2)), 0);
   document.getElementById('total-amount').textContent = '€' + total.toFixed(2);
   document.getElementById('plan-actions').style.display = 'block';
@@ -470,14 +484,20 @@ async function loadRecepten() {
           <strong style="font-size:14px;">${esc(dateStr)}</strong>
           <span style="font-size:12px;color:#888;">${esc(meta)}</span>
         </div>
-        ${(p.meals || []).map(m => `<details style="margin-bottom:4px;">
+        ${(p.meals || []).map(m => {
+          const { shopping, pantry } = splitIngredients(m.ingredients || [], m.searchTerms);
+          return `<details style="margin-bottom:4px;">
           <summary style="cursor:pointer;font-weight:500;font-size:14px;padding:6px 0;border-bottom:1px solid #f0f0f0;">${esc(m.day ? m.day + ' — ' : '')}${esc(m.name)}</summary>
           <div style="padding:8px 0 4px;">
-            <div class="meal-ing">${(m.ingredients || []).map(esc).join(', ')}</div>
+            <ul style="margin:0 0 4px 16px;padding:0;font-size:13px;color:#444;">
+              ${shopping.map(i => `<li>${esc(i)}</li>`).join('')}
+            </ul>
+            ${pantry.length ? `<div style="font-size:12px;color:#999;margin-bottom:4px;">Waarschijnlijk in huis: ${pantry.map(esc).join(', ')}</div>` : ''}
             ${m.preparation ? `<div class="meal-ing" style="margin-top:6px;color:#444;">${esc(m.preparation)}</div>` : ''}
             ${m.nutritionNote ? `<div class="meal-cost" style="color:#5a7a5a;margin-top:4px;">✓ ${esc(m.nutritionNote)}</div>` : ''}
           </div>
-        </details>`).join('')}
+        </details>`;
+        }).join('')}
       </div>`;
     }).join('');
   } catch(e) {
