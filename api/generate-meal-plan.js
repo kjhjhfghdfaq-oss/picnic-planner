@@ -26,6 +26,11 @@ OUTPUT FORMAAT - geef ALLEEN geldige JSON terug, geen uitleg, geen markdown, gee
   "totalEstimatedCost": 45.00
 }
 
+REGELS VOOR ingredients:
+- Gebruik altijd bestaande, correcte Nederlandse productnamen (bijv. "kippenborst", "gehakt", "zalmfilet")
+- Verzin NOOIT samengestelde of niet-bestaande woorden zoals "kippenborstwagen" of "varkenshaasfilet"
+- Bij twijfel: gebruik de eenvoudigste, meest herkenbare naam
+
 REGELS VOOR searchTerms:
 - Één zoekterm per ingrediënt, alleen de productnaam zonder hoeveelheid of eenheid
 - Gebruik enkelvoud en de meest gangbare naam (bijv. "zalm" niet "zalmfilet 300g")

@@ -345,7 +345,7 @@ function renderMealPlan(meals, persons) {
       <ul style="margin:6px 0 0 16px;padding:0;font-size:13px;color:#444;">
         ${shopping.map(i => `<li>${esc(i)}</li>`).join('')}
       </ul>
-      ${pantry.length ? `<div style="margin-top:6px;font-size:12px;color:#999;">Waarschijnlijk in huis: ${pantry.map(esc).join(', ')}</div>` : ''}
+      ${pantry.length ? `<div style="margin-top:6px;font-size:12px;color:#999;">Waarschijnlijk in huis:<ul style="margin:2px 0 0 16px;padding:0;">${pantry.map(i=>`<li>${esc(i)}</li>`).join('')}</ul></div>` : ''}
       ${m.preparation ? `<div class="meal-ing" style="margin-top:6px;color:#444;">${esc(m.preparation)}</div>` : ''}
       ${m.nutritionNote ? `<div class="meal-cost" style="color:#5a7a5a;">✓ ${esc(m.nutritionNote)}</div>` : ''}
       <div class="meal-cost">± €${(m.estimatedCost * (persons / 2)).toFixed(2)} voor ${persons} personen</div>
@@ -492,7 +492,7 @@ async function loadRecepten() {
             <ul style="margin:0 0 4px 16px;padding:0;font-size:13px;color:#444;">
               ${shopping.map(i => `<li>${esc(i)}</li>`).join('')}
             </ul>
-            ${pantry.length ? `<div style="font-size:12px;color:#999;margin-bottom:4px;">Waarschijnlijk in huis: ${pantry.map(esc).join(', ')}</div>` : ''}
+            ${pantry.length ? `<div style="font-size:12px;color:#999;margin-bottom:4px;">Waarschijnlijk in huis:<ul style="margin:2px 0 0 16px;padding:0;">${pantry.map(i=>`<li>${esc(i)}</li>`).join('')}</ul></div>` : ''}
             ${m.preparation ? `<div class="meal-ing" style="margin-top:6px;color:#444;">${esc(m.preparation)}</div>` : ''}
             ${m.nutritionNote ? `<div class="meal-cost" style="color:#5a7a5a;margin-top:4px;">✓ ${esc(m.nutritionNote)}</div>` : ''}
           </div>
