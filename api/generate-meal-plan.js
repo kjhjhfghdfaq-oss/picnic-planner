@@ -1,4 +1,5 @@
 const Anthropic = require('@anthropic-ai/sdk');
+const { kv } = require('@vercel/kv');
 
 const SYSTEM_PROMPT = `Je bent een Nederlandse maaltijdplanner die gezonde maaltijden suggereert op basis van de Schijf van Vijf.
 
@@ -20,7 +21,13 @@ OUTPUT FORMAAT - geef ALLEEN geldige JSON terug, geen uitleg, geen markdown, gee
       "ingredients": ["zalmfilet 300g", "zoete aardappel 400g", "broccoli 300g", "olijfolie 2 eetlepels", "knoflook 2 teentjes", "citroen 1", "zout naar smaak", "peper naar smaak"],
       "searchTerms": ["zalmfilet", "zoete aardappel", "broccoli", "olijfolie", "knoflook", "citroen"],
       "leftoverNote": null,
-      "preparation": "1. Verwarm de oven op 200°C. Snijd de zoete aardappel in blokjes en rooster 20 minuten met olijfolie en knoflook. 2. Gril de zalm 12-15 minuten op middelhoog vuur met citroensap, zout en peper. 3. Stoom de broccoli 5 minuten. Serveer samen.",
+      "cookingTime": "35 minuten",
+      "preparationSteps": [
+        "Verwarm de oven op 200°C. Snijd de zoete aardappel in blokjes.",
+        "Rooster de aardappel 20 minuten met olijfolie en knoflook.",
+        "Gril de zalm 12-15 minuten op middelhoog vuur met citroensap, zout en peper.",
+        "Stoom de broccoli 5 minuten en serveer alles samen."
+      ],
       "estimatedCost": 9.50,
       "nutritionNote": "Vette vis (omega-3), groenten en complexe koolhydraten — volledig Schijf van Vijf"
     }
@@ -30,8 +37,8 @@ OUTPUT FORMAAT - geef ALLEEN geldige JSON terug, geen uitleg, geen markdown, gee
 
 REGELS VOOR receptkwaliteit:
 - Geef minimaal 6 en maximaal 10 ingrediënten per maaltijd, inclusief kruiden, olie en smaakmakers
-- De bereiding bevat concrete stappen met tijden en temperaturen waar relevant (bijv. "20 minuten op 200°C", "5 minuten op middelhoog vuur")
-- Schrijf de bereiding als genummerde stappen, gescheiden door een punt en spatie
+- cookingTime is de totale bereidingstijd (bijv. "20 minuten", "45 minuten")
+- preparationSteps bevat 3-5 stappen als array; elke stap één concrete actie met tijd/temperatuur waar van toepassing
 - Hoeveelheden zijn realistisch voor het opgegeven aantal personen
 
 REGELS VOOR ingredients:
@@ -64,12 +71,28 @@ module.exports = async (req, res) => {
 
   const { persons = 2, meals = 5, budget = 60, diet = "alles", voorraad = "" } = req.body || {};
   const selectedDays = DAGEN.slice(0, Math.min(parseInt(meals) || 5, 7));
-
   const safeVoorraad = String(voorraad).replace(/<[^>]*>/g, '').substring(0, 500);
+
+  let recentNames = [];
+  try {
+    const ids = await kv.lrange('meal-plans', 0, 19);
+    if (ids && ids.length > 0) {
+      const plans = await Promise.all(ids.map(id => kv.get(`plan:${id}`)));
+      recentNames = plans
+        .filter(Boolean)
+        .flatMap(p => (p.meals || []).map(m => m.name))
+        .filter(Boolean)
+        .slice(0, 20);
+    }
+  } catch (_) {
+    // KV niet beschikbaar — doorgaan zonder geschiedenis
+  }
+
   const userMessage = `Plan ${selectedDays.length} maaltijden voor ${persons} personen met een totaalbudget van €${budget}.
 Dieetwens: ${diet}
 Dagen: ${selectedDays.join(', ')}
 ${safeVoorraad ? `Ingrediënten al in huis (verwerk deze bij voorkeur): ${safeVoorraad}` : 'Geen voorraad opgegeven.'}
+${recentNames.length > 0 ? `Vermijd herhaling van deze recepten (gebruik andere namen en hoofdingrediënten): ${recentNames.join(', ')}` : ''}
 
 Geef alleen de JSON terug, geen andere tekst.`;
 
