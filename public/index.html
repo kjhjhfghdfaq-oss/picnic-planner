@@ -372,6 +372,7 @@ async function doPlan() {
       day: m.day,
       name: m.name,
       ingredients: m.ingredients,
+      searchTerms: m.searchTerms || [],
       preparation: m.preparation || '',
       nutritionNote: m.nutritionNote || '',
       estimatedCost: m.estimatedCost || 0
@@ -403,7 +404,13 @@ async function doAddToCart() {
   const btn=document.querySelector('#plan-actions button');
   btn.disabled=true; btn.textContent='Bezig...';
   setStatus('cart-status','Producten zoeken en toevoegen...');
-  const ingredients=[...new Set(mealPlan.flatMap(m=>m.ingredients))];
+  const stripQty = s => s.replace(/\s+\d.*$/, '').replace(/\s+naar\s+smaak.*/i, '').trim();
+  const allTerms = mealPlan.flatMap(m =>
+    m.searchTerms && m.searchTerms.length > 0
+      ? m.searchTerms
+      : m.ingredients.map(stripQty).filter(t => t.length > 1)
+  );
+  const ingredients=[...new Set(allTerms)];
   let added=0,notFound=0;
   for(const ing of ingredients){
     try{
