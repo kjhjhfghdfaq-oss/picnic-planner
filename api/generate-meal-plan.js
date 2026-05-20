@@ -69,8 +69,14 @@ module.exports = async (req, res) => {
   if (req.method === "OPTIONS") { res.status(200).end(); return; }
   if (req.method !== "POST") { res.status(405).json({ error: "Method Not Allowed" }); return; }
 
-  const { persons = 2, meals = 5, budget = 60, diet = "alles", voorraad = "" } = req.body || {};
-  const selectedDays = DAGEN.slice(0, Math.min(parseInt(meals) || 5, 7));
+  const ALLOWED_DIETS = ['alles', 'vegetarisch', 'veganistisch', 'glutenvrij', 'lactosevrij', 'halal'];
+  const rawBody = req.body || {};
+  const persons = Math.max(1, Math.min(12, parseInt(rawBody.persons) || 2));
+  const meals = parseInt(rawBody.meals) || 5;
+  const budget = Math.max(5, Math.min(500, parseFloat(rawBody.budget) || 60));
+  const diet = ALLOWED_DIETS.includes(rawBody.diet) ? rawBody.diet : 'alles';
+  const voorraad = rawBody.voorraad || '';
+  const selectedDays = DAGEN.slice(0, Math.min(meals, 7));
   const safeVoorraad = String(voorraad).replace(/<[^>]*>/g, '').substring(0, 500);
 
   let recentNames = [];
@@ -126,7 +132,7 @@ Geef alleen de JSON terug, geen andere tekst.`;
 
     res.status(200).json(parsed);
   } catch (err) {
-    console.error("Anthropic API error:", err.message);
+    console.error("Anthropic API error:", (err.message || '').replace(/sk-[a-zA-Z0-9-]{20,}/g, '***'));
     res.status(500).json({ error: "Maaltijdplan genereren mislukt. Probeer het opnieuw." });
   }
 };
