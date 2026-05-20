@@ -342,11 +342,14 @@ function renderMealPlan(meals, persons) {
     return `<div class="meal">
       <div class="meal-day">${esc(m.day)}</div>
       <div class="meal-name">${esc(m.name)}</div>
+      ${m.cookingTime ? `<div style="font-size:12px;color:#888;margin-top:2px;">⏱ ${esc(m.cookingTime)}</div>` : ''}
       <ul style="margin:6px 0 0 16px;padding:0;font-size:13px;color:#444;">
         ${shopping.map(i => `<li>${esc(i)}</li>`).join('')}
       </ul>
       ${pantry.length ? `<div style="margin-top:6px;font-size:12px;color:#999;">Waarschijnlijk in huis:<ul style="margin:2px 0 0 16px;padding:0;">${pantry.map(i=>`<li>${esc(i)}</li>`).join('')}</ul></div>` : ''}
-      ${m.preparation ? `<div class="meal-ing" style="margin-top:6px;color:#444;">${esc(m.preparation)}</div>` : ''}
+      ${m.preparationSteps && m.preparationSteps.length > 0
+        ? `<ol style="margin:6px 0 0 16px;padding:0;font-size:13px;color:#444;">${m.preparationSteps.map(s => `<li style="margin-bottom:3px;">${esc(s)}</li>`).join('')}</ol>`
+        : m.preparation ? `<div class="meal-ing" style="margin-top:6px;color:#444;">${esc(m.preparation)}</div>` : ''}
       ${m.leftoverNote ? `<div class="meal-cost" style="color:#2e7d32;">${esc(m.leftoverNote)}</div>` : ''}
       ${m.nutritionNote ? `<div class="meal-cost" style="color:#5a7a5a;">✓ ${esc(m.nutritionNote)}</div>` : ''}
       <div class="meal-cost">± €${(m.estimatedCost * (persons / 2)).toFixed(2)} voor ${persons} personen</div>
@@ -389,6 +392,8 @@ async function doPlan() {
       ingredients: m.ingredients,
       searchTerms: m.searchTerms || [],
       leftoverNote: m.leftoverNote || '',
+      cookingTime: m.cookingTime || '',
+      preparationSteps: m.preparationSteps || [],
       preparation: m.preparation || '',
       nutritionNote: m.nutritionNote || '',
       estimatedCost: m.estimatedCost || 0
@@ -495,7 +500,10 @@ async function loadRecepten() {
               ${shopping.map(i => `<li>${esc(i)}</li>`).join('')}
             </ul>
             ${pantry.length ? `<div style="font-size:12px;color:#999;margin-bottom:4px;">Waarschijnlijk in huis:<ul style="margin:2px 0 0 16px;padding:0;">${pantry.map(i=>`<li>${esc(i)}</li>`).join('')}</ul></div>` : ''}
-            ${m.preparation ? `<div class="meal-ing" style="margin-top:6px;color:#444;">${esc(m.preparation)}</div>` : ''}
+            ${m.cookingTime ? `<div style="font-size:12px;color:#888;margin-bottom:4px;">⏱ ${esc(m.cookingTime)}</div>` : ''}
+            ${m.preparationSteps && m.preparationSteps.length > 0
+              ? `<ol style="margin:4px 0 0 16px;padding:0;font-size:13px;color:#444;">${m.preparationSteps.map(s => `<li style="margin-bottom:3px;">${esc(s)}</li>`).join('')}</ol>`
+              : m.preparation ? `<div class="meal-ing" style="margin-top:6px;color:#444;">${esc(m.preparation)}</div>` : ''}
             ${m.leftoverNote ? `<div class="meal-cost" style="color:#2e7d32;">${esc(m.leftoverNote)}</div>` : ''}
             ${m.nutritionNote ? `<div class="meal-cost" style="color:#5a7a5a;margin-top:4px;">✓ ${esc(m.nutritionNote)}</div>` : ''}
           </div>
