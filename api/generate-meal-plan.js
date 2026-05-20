@@ -16,17 +16,23 @@ OUTPUT FORMAAT - geef ALLEEN geldige JSON terug, geen uitleg, geen markdown, gee
   "meals": [
     {
       "day": "Maandag",
-      "name": "Receptnaam",
-      "ingredients": ["zalm 300g", "zoete aardappel 400g"],
-      "searchTerms": ["zalm", "zoete aardappel"],
+      "name": "Gegrilde zalm met zoete aardappel en broccoli",
+      "ingredients": ["zalmfilet 300g", "zoete aardappel 400g", "broccoli 300g", "olijfolie 2 eetlepels", "knoflook 2 teentjes", "citroen 1", "zout naar smaak", "peper naar smaak"],
+      "searchTerms": ["zalmfilet", "zoete aardappel", "broccoli", "olijfolie", "knoflook", "citroen"],
       "leftoverNote": null,
-      "preparation": "Bereidingsinstructie in 2-3 stappen",
-      "estimatedCost": 8.50,
-      "nutritionNote": "Korte Schijf-van-Vijf opmerking"
+      "preparation": "1. Verwarm de oven op 200°C. Snijd de zoete aardappel in blokjes en rooster 20 minuten met olijfolie en knoflook. 2. Gril de zalm 12-15 minuten op middelhoog vuur met citroensap, zout en peper. 3. Stoom de broccoli 5 minuten. Serveer samen.",
+      "estimatedCost": 9.50,
+      "nutritionNote": "Vette vis (omega-3), groenten en complexe koolhydraten — volledig Schijf van Vijf"
     }
   ],
-  "totalEstimatedCost": 45.00
+  "totalEstimatedCost": 47.50
 }
+
+REGELS VOOR receptkwaliteit:
+- Geef minimaal 6 en maximaal 10 ingrediënten per maaltijd, inclusief kruiden, olie en smaakmakers
+- De bereiding bevat concrete stappen met tijden en temperaturen waar relevant (bijv. "20 minuten op 200°C", "5 minuten op middelhoog vuur")
+- Schrijf de bereiding als genummerde stappen, gescheiden door een punt en spatie
+- Hoeveelheden zijn realistisch voor het opgegeven aantal personen
 
 REGELS VOOR ingredients:
 - Gebruik altijd bestaande, correcte Nederlandse productnamen (bijv. "kippenborst", "gehakt", "zalmfilet")
@@ -72,7 +78,7 @@ Geef alleen de JSON terug, geen andere tekst.`;
   try {
     const response = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 2000,
+      max_tokens: 4000,
       system: [
         {
           type: "text",
