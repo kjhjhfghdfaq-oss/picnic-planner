@@ -2,103 +2,83 @@
 const { kv } = require('@vercel/kv');
 const { picnicRequest } = require('./picnic');
 
-// Haalt afgeronde leveringen op, cachet onveranderlijke leveringen in KV,
-// verrijkt elke regel met de Picnic-categorie en geeft de genormaliseerde set terug.
+// Hoeveel recente leveringen we in detail ophalen (cap tegen Vercel-timeout).
+// Afgeronde leveringen worden gecachet, dus dit kost alleen de eerste keer iets.
+const MAX_DETAIL = 24;
+const BATCH = 8;
+
+// Haalt de recente leveringen op, cachet onveranderlijke (afgeronde) leveringen in KV,
+// en geeft de genormaliseerde set terug. Detailcalls draaien parallel in batches.
 async function getNormalizedDeliveries(auth) {
-  // 1. Samenvatting van leveringen ophalen (lijst met ids + datums).
-  const summary = await picnicRequest({ method: 'POST', path: '/deliveries/summary', auth, body: {} });
+  const summary = await picnicRequest({ method: 'POST', path: '/deliveries/summary', auth, body: [] });
   if (summary.status === 401 || summary.status === 403) {
     const err = new Error('unauthorized');
     err.status = summary.status;
     throw err;
   }
-  const list = Array.isArray(summary.json) ? summary.json : (summary.json?.deliveries || []);
+  const list = Array.isArray(summary.json) ? summary.json : [];
+  const recent = list.slice(0, MAX_DETAIL); // summary is nieuwste-eerst
 
   const deliveries = [];
-  for (const entry of list) {
-    const id = entry.delivery_id || entry.id;
-    if (!id) continue;
-
-    // 2. Cache check (afgeronde leveringen veranderen nooit).
-    let cached = null;
-    try { cached = await kv.get(`delivery:${id}`); } catch (_) {}
-    if (cached) { deliveries.push(cached); continue; }
-
-    // 3. Detail ophalen.
-    const detail = await picnicRequest({ method: 'GET', path: `/deliveries/${id}`, auth });
-    if (detail.status < 200 || detail.status >= 300 || !detail.json) continue;
-
-    const normalized = await normalizeDelivery(detail.json, auth);
-    if (!normalized) continue;
-
-    // alleen afgeronde leveringen cachen
-    if (isCompleted(detail.json)) {
-      try { await kv.set(`delivery:${id}`, normalized); } catch (_) {}
-    }
-    deliveries.push(normalized);
+  for (let i = 0; i < recent.length; i += BATCH) {
+    const chunk = recent.slice(i, i + BATCH);
+    const settled = await Promise.all(chunk.map(entry => loadOne(entry, auth)));
+    deliveries.push(...settled.filter(Boolean));
   }
   return deliveries;
 }
 
-function isCompleted(raw) {
-  const status = (raw.status || raw.delivery_status || '').toString().toUpperCase();
-  if (status === 'COMPLETED') return true;
-  if (status === 'CURRENT') return false;
-  return true; // onbekende status: neem aan voltooid en cache
+async function loadOne(entry, auth) {
+  const id = entry.delivery_id;
+  if (!id) return null;
+
+  // Afgeronde leveringen veranderen nooit — uit cache als beschikbaar.
+  try {
+    const cached = await kv.get(`delivery:${id}`);
+    if (cached) return cached;
+  } catch (_) {}
+
+  const detail = await picnicRequest({ method: 'GET', path: `/deliveries/${id}`, auth });
+  if (detail.status < 200 || detail.status >= 300 || !detail.json) return null;
+
+  const normalized = normalizeDelivery(detail.json, entry);
+  if (!normalized) return null;
+
+  if ((entry.status || '').toUpperCase() === 'COMPLETED') {
+    try { await kv.set(`delivery:${id}`, normalized); } catch (_) {}
+  }
+  return normalized;
 }
 
-// Zet een Picnic-leveringsobject om naar de interne Delivery-vorm.
-// VERIFIEER LIVE: de exacte velden (orders[].items[].items[] shape) kunnen afwijken.
-async function normalizeDelivery(raw, auth) {
-  const id = raw.delivery_id || raw.id;
-  const date = raw.creation_time || raw.delivery_time?.start || raw.eta2?.start || new Date().toISOString();
+// Zet een Picnic-leveringsdetail + bijbehorende summary-entry om naar de interne Delivery-vorm.
+// Vorm bevestigd live (7 juni 2026): orders[].items[] = ORDER_LINE, line.items[] = ORDER_ARTICLE.
+function normalizeDelivery(detail, summaryEntry) {
+  const id = detail.delivery_id || detail.id;
+  if (!id) return null;
+  const date = detail.creation_time || (summaryEntry && summaryEntry.creation_time)
+    || (detail.delivery_time && detail.delivery_time.start) || '';
 
-  const descriptors = [];
-  for (const order of (raw.orders || [])) {
-    for (const orderLine of (order.items || [])) {
-      const articles = orderLine.items || [orderLine];
-      const first = articles[0] || {};
-      const productId = (first.id || orderLine.id || '').replace(/^s/, '');
-      if (!productId) continue;
-      descriptors.push({
-        productId,
-        name: first.name || orderLine.name || productId,
-        count: articles.length || orderLine.decorators?.length || 1,
-        priceCents: orderLine.price || first.price || 0,
-        first,
-      });
+  const items = [];
+  for (const order of (detail.orders || [])) {
+    for (const line of (order.items || [])) {            // ORDER_LINE
+      const articles = line.items || [];                 // ORDER_ARTICLE[]
+      const art = articles[0];
+      if (!art || !art.id) continue;
+      const productId = String(art.id).replace(/^s/, '');
+      const qtyDecorator = (art.decorators || []).find(d => d && d.type === 'QUANTITY');
+      const count = (qtyDecorator && qtyDecorator.quantity) || articles.length || 1;
+      const priceCents = (line.display_price != null ? line.display_price : line.price) || 0;
+      // category komt (nog) niet uit de leveringsdata; S5-verrijking volgt apart.
+      items.push({ productId, name: art.name || productId, count, priceCents, category: '' });
     }
   }
 
-  const lines = await Promise.all(descriptors.map(async d => ({
-    productId: d.productId,
-    name: d.name,
-    count: d.count,
-    priceCents: d.priceCents,
-    category: await categoryFor(d.productId, d.first, auth),
-  })));
+  // Totaal: autoritatief uit de summary order-totalen; anders som van regelprijzen.
+  const summaryTotal = ((summaryEntry && summaryEntry.orders) || [])
+    .reduce((s, o) => s + (o.total_price || 0), 0);
+  const totalCents = summaryTotal || items.reduce((s, l) => s + l.priceCents, 0);
 
-  const totalCents = raw.total_price || lines.reduce((s, l) => s + l.priceCents, 0);
-  return { id, date, totalCents, items: lines };
-}
-
-// Categorie per product, gecachet. Eerst proberen uit de regel-data, anders ophalen.
-async function categoryFor(productId, article, auth) {
-  if (article && article.category_name) return article.category_name;
-  if (!productId) return '';
-  const key = `product-s5:${productId}`;
-  try {
-    const hit = await kv.get(key);
-    if (hit) return hit;
-  } catch (_) {}
-  try {
-    const resp = await picnicRequest({ method: 'GET', path: `/articles/${productId}/category`, auth });
-    const cat = resp.json?.name || resp.json?.category_name || '';
-    if (cat) { try { await kv.set(key, cat); } catch (_) {} }
-    return cat;
-  } catch (_) {
-    return '';
-  }
+  return { id, date, totalCents, items };
 }
 
 module.exports = { getNormalizedDeliveries };

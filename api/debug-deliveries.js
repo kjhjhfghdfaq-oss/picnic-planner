@@ -1,9 +1,9 @@
 'use strict';
-// TIJDELIJK debug-endpoint — onderzoekt de echte vorm van de Picnic deliveries-response.
-// Wordt verwijderd zodra de normalisatie in orders.js is afgestemd.
+// TIJDELIJK debug-endpoint — zoekt uit welk artikel-endpoint de productcategorie geeft (voor de S5-meter).
+// Wordt verwijderd zodra de S5-verrijking in orders.js is afgestemd.
 const { picnicRequest } = require('./_lib/picnic');
 
-function snippet(raw, n = 4000) {
+function snippet(raw, n = 2500) {
   return typeof raw === 'string' ? raw.slice(0, n) : raw;
 }
 
@@ -13,47 +13,27 @@ module.exports = async (req, res) => {
   const auth = req.query.auth;
   if (!auth) { res.status(400).json({ error: 'auth ontbreekt' }); return; }
 
-  const out = {};
-
-  // Probeer de mogelijke list-endpoints/methodes.
+  // Bekend product uit jouw historie: Picnic bloemkool (s1167116).
   const probes = [
-    ['POST /deliveries/summary []', { method: 'POST', path: '/deliveries/summary', auth, body: [] }],
-    ['POST /deliveries []', { method: 'POST', path: '/deliveries', auth, body: [] }],
+    ['GET /articles/1167116/category', { method: 'GET', path: '/articles/1167116/category', auth }],
+    ['GET /articles/s1167116/category', { method: 'GET', path: '/articles/s1167116/category', auth }],
+    ['GET /articles/1167116', { method: 'GET', path: '/articles/1167116', auth }],
+    ['GET /articles/s1167116', { method: 'GET', path: '/articles/s1167116', auth }],
+    ['GET /my_store?depth=0', { method: 'GET', path: '/my_store?depth=0', auth }],
   ];
 
-  let firstList = null;
+  const out = {};
   for (const [label, opts] of probes) {
     try {
       const r = await picnicRequest(opts);
-      const isArray = Array.isArray(r.json);
       out[label] = {
         status: r.status,
-        isArray,
-        length: isArray ? r.json.length : undefined,
-        // toon de keys van het eerste element zodat we de vorm zien
-        firstKeys: isArray && r.json[0] ? Object.keys(r.json[0]) : undefined,
-        sample: snippet(r.raw, 1500),
+        topKeys: r.json && typeof r.json === 'object' ? Object.keys(r.json).slice(0, 20) : undefined,
+        sample: snippet(r.raw),
       };
-      if (!firstList && isArray && r.json.length > 0) firstList = r.json;
     } catch (e) {
       out[label] = { error: String(e.message || e).slice(0, 200) };
     }
   }
-
-  // Pak één leverings-id en haal het detail op, zodat we de regel-structuur zien.
-  if (firstList) {
-    const entry = firstList[0];
-    const id = entry.delivery_id || entry.id;
-    out._firstDeliveryId = id;
-    if (id) {
-      try {
-        const d = await picnicRequest({ method: 'GET', path: `/deliveries/${id}`, auth });
-        out._deliveryDetail = { status: d.status, topKeys: d.json ? Object.keys(d.json) : undefined, sample: snippet(d.raw, 4000) };
-      } catch (e) {
-        out._deliveryDetail = { error: String(e.message || e).slice(0, 200) };
-      }
-    }
-  }
-
   res.status(200).json(out);
 };
