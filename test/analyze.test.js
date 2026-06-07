@@ -109,3 +109,33 @@ test('topProducts respecteert limit en lege input', () => {
   assert.strictEqual(topProducts(PRODUCT_FIXTURE, 1).byCount.length, 1);
   assert.deepStrictEqual(topProducts([], 5), { byCount: [], bySpend: [] });
 });
+
+const { s5Distribution } = require('../api/_lib/analyze');
+
+const S5_FIXTURE = [
+  { id: 'a', date: '2026-05-01T10:00:00.000Z', totalCents: 0, items: [
+    { productId: 'p1', name: 'Appel', count: 1, priceCents: 200, category: 'Groente & fruit' },
+    { productId: 'p2', name: 'Brood', count: 1, priceCents: 200, category: 'Brood & gebak' },
+    { productId: 'p3', name: 'Cola', count: 1, priceCents: 600, category: 'Frisdrank' },
+  ]},
+];
+
+test('s5Distribution berekent uitgaven-aandeel per vak', () => {
+  const r = s5Distribution(S5_FIXTURE);
+  // totaal 1000c: groente_fruit 200 (20%), granen 200 (20%), buiten 600 (60%)
+  assert.strictEqual(r.shares.groente_fruit, 20);
+  assert.strictEqual(r.shares.granen, 20);
+  assert.strictEqual(r.shares.buiten, 60);
+  assert.strictEqual(r.shares.eiwit, 0);
+});
+
+test('s5Distribution geeft vers-aandeel (groente_fruit)', () => {
+  const r = s5Distribution(S5_FIXTURE);
+  assert.strictEqual(r.freshPct, 20);
+});
+
+test('s5Distribution geeft nul-shares bij lege input', () => {
+  const r = s5Distribution([]);
+  assert.strictEqual(r.freshPct, 0);
+  assert.strictEqual(r.shares.groente_fruit, 0);
+});

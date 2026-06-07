@@ -74,4 +74,22 @@ function topProducts(deliveries, limit = 5) {
   return { byCount, bySpend };
 }
 
-module.exports = { S5_BUCKETS, mapCategoryToS5, aggregateSpending, topProducts };
+function s5Distribution(deliveries) {
+  const cents = {};
+  for (const b of S5_BUCKETS) cents[b] = 0;
+  let total = 0;
+  for (const d of deliveries) {
+    for (const it of d.items || []) {
+      const bucket = mapCategoryToS5(it.category);
+      cents[bucket] += it.priceCents || 0;
+      total += it.priceCents || 0;
+    }
+  }
+  const shares = {};
+  for (const b of S5_BUCKETS) {
+    shares[b] = total > 0 ? Math.round((cents[b] / total) * 100) : 0;
+  }
+  return { shares, freshPct: shares.groente_fruit };
+}
+
+module.exports = { S5_BUCKETS, mapCategoryToS5, aggregateSpending, topProducts, s5Distribution };
