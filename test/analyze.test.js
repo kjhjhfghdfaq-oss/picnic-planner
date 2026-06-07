@@ -67,10 +67,23 @@ test('aggregateSpending berekent gemiddelde mand', () => {
   assert.strictEqual(r.avgBasketCents, 5000); // (4000+6000+5000)/3
 });
 
-test('aggregateSpending berekent trend t.o.v. vorige maand', () => {
+test('aggregateSpending negeert de lopende maand voor de trend', () => {
+  // mei is de lopende maand (now = 25 mei) => telt NIET mee voor de trend.
+  // Er is maar één afgeronde maand (april), dus geen trend.
   const r = aggregateSpending(SPEND_FIXTURE, '2026-05-25T00:00:00.000Z');
-  // mei 11000 vs april 4000 => +175%
-  assert.strictEqual(r.trendPct, 175);
+  assert.strictEqual(r.trendPct, 0);
+});
+
+test('aggregateSpending trend vergelijkt de twee laatste afgeronde maanden', () => {
+  const fx = [
+    { id: 'm1', date: '2026-03-10T10:00:00.000Z', totalCents: 4000, items: [] },
+    { id: 'm2', date: '2026-04-10T10:00:00.000Z', totalCents: 6000, items: [] },
+    { id: 'm3', date: '2026-05-10T10:00:00.000Z', totalCents: 2000, items: [] }, // lopend, lager
+  ];
+  const r = aggregateSpending(fx, '2026-05-25T00:00:00.000Z');
+  // april (6000) vs maart (4000) => +50%; mei telt niet mee
+  assert.strictEqual(r.trendPct, 50);
+  assert.strictEqual(r.totalThisMonthCents, 2000);
 });
 
 test('aggregateSpending geeft nulwaarden bij lege historie', () => {
@@ -174,65 +187,57 @@ test('orderRhythm is veilig bij 0 of 1 bestelling', () => {
   assert.strictEqual(one.orderCount, 1);
 });
 
-const { dueProducts } = require('../api/_lib/analyze');
+const { stapleProducts } = require('../api/_lib/analyze');
 
-// p1: elke ~7 dagen besteld, 6 stuks => regelmatig, due
-// p2: maar 1 keer besteld => valt af
-// p3: zeer onregelmatig => valt af
-const DUE_FIXTURE = [
-  { id: 'd1', date: '2026-05-01T10:00:00.000Z', totalCents: 0, items: [
-    { productId: 'p1', name: 'Bruiswater', count: 6, priceCents: 600, category: 'Frisdrank' },
-    { productId: 'p3', name: 'Kokosmelk', count: 1, priceCents: 150, category: '' },
+// p1 in 5/5 (100%), p2 in 4/5 (80%), p3 in 3/5 (60%), p4 in 1/5 (20%)
+const STAPLE_FIXTURE = [
+  { id: 's1', date: '2026-05-29T10:00:00.000Z', totalCents: 0, items: [
+    { productId: 'p1', name: 'Bruiswater', count: 6, priceCents: 600, category: '' },
   ]},
-  { id: 'd2', date: '2026-05-08T10:00:00.000Z', totalCents: 0, items: [
-    { productId: 'p1', name: 'Bruiswater', count: 6, priceCents: 600, category: 'Frisdrank' },
+  { id: 's2', date: '2026-05-22T10:00:00.000Z', totalCents: 0, items: [
+    { productId: 'p1', name: 'Bruiswater', count: 6, priceCents: 600, category: '' },
+    { productId: 'p2', name: 'Melk', count: 2, priceCents: 300, category: '' },
   ]},
-  { id: 'd3', date: '2026-05-15T10:00:00.000Z', totalCents: 0, items: [
-    { productId: 'p1', name: 'Bruiswater', count: 6, priceCents: 600, category: 'Frisdrank' },
-    { productId: 'p2', name: 'Eenmalig item', count: 1, priceCents: 100, category: '' },
-    { productId: 'p3', name: 'Kokosmelk', count: 1, priceCents: 150, category: '' },
+  { id: 's3', date: '2026-05-15T10:00:00.000Z', totalCents: 0, items: [
+    { productId: 'p1', name: 'Bruiswater', count: 6, priceCents: 600, category: '' },
+    { productId: 'p2', name: 'Melk', count: 2, priceCents: 300, category: '' },
+    { productId: 'p3', name: 'Koriander', count: 1, priceCents: 100, category: '' },
+  ]},
+  { id: 's4', date: '2026-05-08T10:00:00.000Z', totalCents: 0, items: [
+    { productId: 'p1', name: 'Bruiswater', count: 6, priceCents: 600, category: '' },
+    { productId: 'p2', name: 'Melk', count: 2, priceCents: 300, category: '' },
+    { productId: 'p3', name: 'Koriander', count: 1, priceCents: 100, category: '' },
+  ]},
+  { id: 's5', date: '2026-05-01T10:00:00.000Z', totalCents: 0, items: [
+    { productId: 'p1', name: 'Bruiswater', count: 6, priceCents: 600, category: '' },
+    { productId: 'p2', name: 'Melk', count: 2, priceCents: 300, category: '' },
+    { productId: 'p3', name: 'Koriander', count: 1, priceCents: 100, category: '' },
+    { productId: 'p4', name: 'Eenmalig', count: 1, priceCents: 100, category: '' },
   ]},
 ];
 
-test('dueProducts vindt regelmatig product dat toe is', () => {
-  // now = 7 dagen na laatste bestelling van p1 (15 mei) => due
-  const r = dueProducts(DUE_FIXTURE, '2026-05-22T10:00:00.000Z');
+test('stapleProducts (streng 0.7) geeft alleen vaste producten, gesorteerd op frequentie', () => {
+  const r = stapleProducts(STAPLE_FIXTURE, { minFraction: 0.7 });
+  assert.deepStrictEqual(r.map(x => x.productId), ['p1', 'p2']);
   const p1 = r.find(x => x.productId === 'p1');
-  assert.ok(p1, 'p1 zou due moeten zijn');
+  assert.strictEqual(p1.frequencyPct, 100);
   assert.strictEqual(p1.usualQty, 6);
-  assert.strictEqual(p1.avgIntervalDays, 7);
 });
 
-test('dueProducts negeert producten met < 3 bestellingen', () => {
-  const r = dueProducts(DUE_FIXTURE, '2026-05-22T10:00:00.000Z');
-  assert.ok(!r.find(x => x.productId === 'p2'), 'p2 (1x) mag niet voorkomen');
+test('stapleProducts (ruim 0.5) neemt ook semi-regelmatige producten mee', () => {
+  const ids = stapleProducts(STAPLE_FIXTURE, { minFraction: 0.5 }).map(x => x.productId);
+  assert.ok(ids.includes('p3'), 'p3 (60%) valt erbij op 0.5');
+  assert.ok(!ids.includes('p4'), 'p4 (20%) valt af');
 });
 
-test('dueProducts negeert producten met te weinig bestellingen (p3)', () => {
-  // p3 besteld op 1 mei en 15 mei (gat 14d) - maar slechts 2x => valt al af op minOrders
-  const r = dueProducts(DUE_FIXTURE, '2026-05-22T10:00:00.000Z');
-  assert.ok(!r.find(x => x.productId === 'p3'), 'p3 mag niet voorkomen');
+test('stapleProducts negeert producten met < minOrders voorkomens', () => {
+  // lage drempel, maar p4 komt maar 1x voor (< minOrders 3) => valt af
+  const r = stapleProducts(STAPLE_FIXTURE, { minFraction: 0.1 });
+  assert.ok(!r.find(x => x.productId === 'p4'), 'p4 valt af op minOrders');
 });
 
-test('dueProducts laat product weg dat nog niet toe is', () => {
-  // now = 1 dag na laatste bestelling => nog niet toe (interval 7)
-  const r = dueProducts(DUE_FIXTURE, '2026-05-16T10:00:00.000Z');
-  assert.ok(!r.find(x => x.productId === 'p1'), 'p1 nog niet toe');
-});
-
-test('dueProducts is leeg bij lege input', () => {
-  assert.deepStrictEqual(dueProducts([], '2026-05-22T10:00:00.000Z'), []);
-});
-
-test('dueProducts negeert producten met onregelmatig interval (CV-filter)', () => {
-  const fixture = [
-    { id: 'x1', date: '2026-04-01T10:00:00.000Z', totalCents: 0, items: [{ productId: 'q1', name: 'Onregelmatig', count: 1, priceCents: 100, category: '' }] },
-    { id: 'x2', date: '2026-04-02T10:00:00.000Z', totalCents: 0, items: [{ productId: 'q1', name: 'Onregelmatig', count: 1, priceCents: 100, category: '' }] },
-    { id: 'x3', date: '2026-05-02T10:00:00.000Z', totalCents: 0, items: [{ productId: 'q1', name: 'Onregelmatig', count: 1, priceCents: 100, category: '' }] },
-  ];
-  // gaps 1 dag en 30 dagen => zeer onregelmatig (CV hoog) => uitgesloten
-  const r = dueProducts(fixture, '2026-06-01T10:00:00.000Z');
-  assert.ok(!r.find(x => x.productId === 'q1'), 'onregelmatig product mag niet due zijn');
+test('stapleProducts is leeg bij lege input', () => {
+  assert.deepStrictEqual(stapleProducts([], { minFraction: 0.7 }), []);
 });
 
 const { productTotals, s5SharesFromProductSpend } = require('../api/_lib/analyze');

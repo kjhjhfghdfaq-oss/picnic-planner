@@ -1,6 +1,6 @@
 'use strict';
 const { getNormalizedDeliveries } = require('./_lib/orders');
-const { dueProducts } = require('./_lib/analyze');
+const { stapleProducts } = require('./_lib/analyze');
 const { picnicRequest } = require('./_lib/picnic');
 
 module.exports = async (req, res) => {
@@ -15,7 +15,7 @@ module.exports = async (req, res) => {
 
   try {
     const deliveries = await getNormalizedDeliveries(auth);
-    const due = dueProducts(deliveries, new Date().toISOString());
+    const due = stapleProducts(deliveries, { minFraction: 0.7 });
     if (due.length === 0) { res.status(200).json({ added: [], skipped: [], productIds: [] }); return; }
 
     // Huidige mand ophalen om dubbel toevoegen te voorkomen.

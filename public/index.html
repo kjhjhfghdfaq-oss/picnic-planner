@@ -239,11 +239,13 @@ async function loadDashboard() {
     // KPI's
     const eur = c => '€' + (c/100).toFixed(2);
     const trend = d.spending.trendPct;
-    const trendStr = trend === 0 ? '' : (trend > 0 ? `▲ ${trend}%` : `▼ ${Math.abs(trend)}%`);
+    const trendStr = trend === 0 ? '—' : (trend > 0 ? `▲ ${trend}%` : `▼ ${Math.abs(trend)}%`);
+    const trendColor = trend > 0 ? '#c62828' : (trend < 0 ? '#2e7d32' : '#888');
     document.getElementById('dash-kpis').innerHTML = `
-      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-        <div><div style="font-size:12px;color:#888;">Deze maand</div><div style="font-size:20px;font-weight:600;">${eur(d.spending.totalThisMonthCents)} <span style="font-size:13px;color:${trend>0?'#c62828':'#2e7d32'};">${trendStr}</span></div></div>
+      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+        <div><div style="font-size:12px;color:#888;">Deze maand (lopend)</div><div style="font-size:20px;font-weight:600;">${eur(d.spending.totalThisMonthCents)}</div></div>
         <div><div style="font-size:12px;color:#888;">Gemiddelde mand</div><div style="font-size:20px;font-weight:600;">${eur(d.spending.avgBasketCents)}</div></div>
+        <div><div style="font-size:12px;color:#888;">Maandtrend</div><div style="font-size:20px;font-weight:600;color:${trendColor};" title="laatste twee afgeronde maanden">${trendStr}</div></div>
       </div>`;
 
     // Uitgaven-grafiek (per maand)

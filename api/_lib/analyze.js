@@ -43,16 +43,18 @@ function aggregateSpending(deliveries, nowIso) {
     .map(([month, totalCents]) => ({ month, totalCents }));
 
   const thisMonth = monthKey(nowIso);
-  const prevDate = new Date(nowIso);
-  prevDate.setUTCMonth(prevDate.getUTCMonth() - 1);
-  const prevMonth = monthKey(prevDate.toISOString());
-
   const totalThisMonthCents = byMonthMap.get(thisMonth) || 0;
-  const prevCents = byMonthMap.get(prevMonth) || 0;
   const avgBasketCents = deliveries.length ? Math.round(total / deliveries.length) : 0;
-  const trendPct = prevCents > 0
-    ? Math.round(((totalThisMonthCents - prevCents) / prevCents) * 100)
-    : 0;
+
+  // Trend op AFGERONDE maanden: de lopende (huidige) maand telt niet mee,
+  // anders lijkt een half-volle maand altijd een daling.
+  const completed = byMonth.filter(m => m.month < thisMonth);
+  let trendPct = 0;
+  if (completed.length >= 2) {
+    const last = completed[completed.length - 1].totalCents;
+    const prev = completed[completed.length - 2].totalCents;
+    trendPct = prev > 0 ? Math.round(((last - prev) / prev) * 100) : 0;
+  }
 
   return { byMonth, totalThisMonthCents, avgBasketCents, trendPct };
 }
@@ -158,18 +160,26 @@ function mostCommon(values) {
   return best;
 }
 
-function dueProducts(deliveries, nowIso, opts = {}) {
+// Vaste boodschappen = producten die in een hoog aandeel van je recente bestellingen voorkomen.
+// Frequentie-gebaseerd (niet timing): zo komen echte vaste producten naar boven en valt
+// incidentele aankoop eruit. opts.minFraction = drempel (0.7 = streng).
+function stapleProducts(deliveries, opts = {}) {
+  const minFraction = opts.minFraction || 0.7;
+  const recentN = opts.recentN || 12;
   const minOrders = opts.minOrders || 3;
-  const maxCv = opts.maxCv || 0.5;       // max variatiecoëfficiënt op de intervallen
-  const dueRatio = opts.dueRatio || 0.8; // due als daysSince >= avgInterval * dueRatio
-  const now = new Date(nowIso);
 
-  // verzamel per product: besteldatums + counts
-  const byProduct = new Map();
-  for (const d of deliveries) {
+  const sorted = [...deliveries].sort((a, b) => new Date(b.date) - new Date(a.date));
+  const recent = sorted.slice(0, recentN);
+  const denom = recent.length;
+  if (denom === 0) return [];
+
+  const byProduct = new Map(); // productId -> { name, deliveries, counts }
+  for (const d of recent) {
+    const seenInDelivery = new Set();
     for (const it of d.items || []) {
-      const cur = byProduct.get(it.productId) || { name: it.name, dates: [], counts: [] };
-      cur.dates.push(new Date(d.date));
+      if (!it.productId) continue;
+      const cur = byProduct.get(it.productId) || { name: it.name, deliveries: 0, counts: [] };
+      if (!seenInDelivery.has(it.productId)) { cur.deliveries += 1; seenInDelivery.add(it.productId); }
       cur.counts.push(it.count || 1);
       cur.name = it.name || cur.name;
       byProduct.set(it.productId, cur);
@@ -178,34 +188,22 @@ function dueProducts(deliveries, nowIso, opts = {}) {
 
   const result = [];
   for (const [productId, info] of byProduct) {
-    if (info.dates.length < minOrders) continue;
-    const dates = [...info.dates].sort((a, b) => a - b);
-    const gaps = [];
-    for (let i = 1; i < dates.length; i++) gaps.push((dates[i] - dates[i - 1]) / DAY_MS);
-    const avg = gaps.reduce((s, g) => s + g, 0) / gaps.length;
-    if (avg <= 0) continue;
-    const variance = gaps.reduce((s, g) => s + (g - avg) ** 2, 0) / gaps.length;
-    const cv = Math.sqrt(variance) / avg;
-    if (cv > maxCv) continue; // te onregelmatig
-
-    const lastOrdered = dates[dates.length - 1];
-    const daysSince = (now - lastOrdered) / DAY_MS;
-    if (daysSince < avg * dueRatio) continue; // nog niet toe
-
+    if (info.deliveries < minOrders) continue;
+    const frequency = info.deliveries / denom;
+    if (frequency < minFraction) continue;
     result.push({
       productId,
       name: info.name,
       usualQty: mostCommon(info.counts),
-      avgIntervalDays: Math.round(avg),
-      lastOrdered: lastOrdered.toISOString(),
-      daysSince: Math.round(daysSince),
+      frequencyPct: Math.round(frequency * 100),
+      timesOrdered: info.deliveries,
     });
   }
-  return result.sort((a, b) => b.daysSince - a.daysSince);
+  return result.sort((a, b) => b.frequencyPct - a.frequencyPct);
 }
 
 module.exports = {
   S5_BUCKETS, mapCategoryToS5, aggregateSpending,
   topProducts, s5Distribution, productTotals, s5SharesFromProductSpend,
-  orderRhythm, dueProducts,
+  orderRhythm, stapleProducts,
 };
