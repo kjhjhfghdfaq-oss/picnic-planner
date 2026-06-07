@@ -282,12 +282,12 @@ async function loadDashboard() {
     document.getElementById('dash-rhythm').innerHTML = `
       <strong>Bestelritme</strong>
       <div style="font-size:13px;color:#444;margin-top:6px;">
-        Gemiddeld elke <b>${d.rhythm.avgDaysBetween}</b> dagen · <b>${d.rhythm.avgItemsPerOrder}</b> producten per bestelling · <b>${d.rhythm.orderCount}</b> bestellingen
+        Gemiddeld elke <b>${esc(d.rhythm.avgDaysBetween)}</b> dagen · <b>${esc(d.rhythm.avgItemsPerOrder)}</b> producten per bestelling · <b>${esc(d.rhythm.orderCount)}</b> bestellingen
       </div>`;
 
     loadInsights(d);
   } catch (e) {
-    document.getElementById('dash-kpis').innerHTML = '<div class="empty error">Fout: ' + e.message + '</div>';
+    document.getElementById('dash-kpis').innerHTML = '<div class="empty error">Fout: ' + esc(e.message) + '</div>';
   }
 }
 
