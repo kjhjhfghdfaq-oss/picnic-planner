@@ -42,7 +42,9 @@ async function getNormalizedDeliveries(auth) {
 
 function isCompleted(raw) {
   const status = (raw.status || raw.delivery_status || '').toString().toUpperCase();
-  return status === 'COMPLETED' || status === 'CURRENT' ? status === 'COMPLETED' : true;
+  if (status === 'COMPLETED') return true;
+  if (status === 'CURRENT') return false;
+  return true; // onbekende status: neem aan voltooid en cache
 }
 
 // Zet een Picnic-leveringsobject om naar de interne Delivery-vorm.
@@ -51,21 +53,31 @@ async function normalizeDelivery(raw, auth) {
   const id = raw.delivery_id || raw.id;
   const date = raw.creation_time || raw.delivery_time?.start || raw.eta2?.start || new Date().toISOString();
 
-  const lines = [];
-  const orders = raw.orders || [];
-  for (const order of orders) {
+  const descriptors = [];
+  for (const order of (raw.orders || [])) {
     for (const orderLine of (order.items || [])) {
-      // orderLine.items is doorgaans een array van identieke artikelen (1 per stuk)
       const articles = orderLine.items || [orderLine];
       const first = articles[0] || {};
       const productId = (first.id || orderLine.id || '').replace(/^s/, '');
-      const name = first.name || orderLine.name || productId;
-      const count = articles.length || orderLine.decorators?.length || 1;
-      const priceCents = orderLine.price || first.price || 0;
-      const category = await categoryFor(productId, first, auth);
-      if (productId) lines.push({ productId, name, count, priceCents, category });
+      if (!productId) continue;
+      descriptors.push({
+        productId,
+        name: first.name || orderLine.name || productId,
+        count: articles.length || orderLine.decorators?.length || 1,
+        priceCents: orderLine.price || first.price || 0,
+        first,
+      });
     }
   }
+
+  const lines = await Promise.all(descriptors.map(async d => ({
+    productId: d.productId,
+    name: d.name,
+    count: d.count,
+    priceCents: d.priceCents,
+    category: await categoryFor(d.productId, d.first, auth),
+  })));
+
   const totalCents = raw.total_price || lines.reduce((s, l) => s + l.priceCents, 0);
   return { id, date, totalCents, items: lines };
 }
