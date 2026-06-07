@@ -98,6 +98,38 @@ function s5Distribution(deliveries) {
   return { shares, freshPct: shares.groente_fruit };
 }
 
+// Totaal per uniek product over alle leveringen (voor S5-classificatie + verdeling).
+function productTotals(deliveries) {
+  const acc = new Map();
+  for (const d of deliveries) {
+    for (const it of d.items || []) {
+      const cur = acc.get(it.productId) || { name: it.name, count: 0, spendCents: 0 };
+      cur.count += it.count || 0;
+      cur.spendCents += it.priceCents || 0;
+      cur.name = it.name || cur.name;
+      acc.set(it.productId, cur);
+    }
+  }
+  return [...acc.entries()].map(([productId, v]) => ({ productId, ...v }));
+}
+
+// S5-verdeling op basis van een vooraf bepaalde bucket-map (productId -> S5-vak).
+// products: [{productId, spendCents}]. Onbekende producten vallen in 'buiten'.
+function s5SharesFromProductSpend(products, bucketByProduct) {
+  const cents = {};
+  for (const b of S5_BUCKETS) cents[b] = 0;
+  let total = 0;
+  for (const p of products || []) {
+    const raw = bucketByProduct && bucketByProduct[p.productId];
+    const bucket = S5_BUCKETS.includes(raw) ? raw : 'buiten';
+    cents[bucket] += p.spendCents || 0;
+    total += p.spendCents || 0;
+  }
+  const shares = {};
+  for (const b of S5_BUCKETS) shares[b] = total > 0 ? Math.round((cents[b] / total) * 100) : 0;
+  return { shares, freshPct: shares.groente_fruit };
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function orderRhythm(deliveries) {
@@ -174,5 +206,6 @@ function dueProducts(deliveries, nowIso, opts = {}) {
 
 module.exports = {
   S5_BUCKETS, mapCategoryToS5, aggregateSpending,
-  topProducts, s5Distribution, orderRhythm, dueProducts,
+  topProducts, s5Distribution, productTotals, s5SharesFromProductSpend,
+  orderRhythm, dueProducts,
 };

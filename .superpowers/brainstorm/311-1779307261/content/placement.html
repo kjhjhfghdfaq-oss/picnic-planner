@@ -1,0 +1,63 @@
+<h2>Waar staan de restverwerkingssuggesties?</h2>
+<p class="subtitle">Beide opties verschijnen automatisch na het genereren van het maaltijdplan</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Direct onder het maaltijdplan</h3>
+      <p>Na de 5 hoofdmaaltijden volgen 1–2 restverwerkingsrecepten in een apart blok met eigen header "Restverwerking". Zelfde scroll-flow, alles op één plek.</p>
+      <div class="mockup" style="margin-top:12px;">
+        <div class="mockup-header">Maaltijdplan — preview</div>
+        <div class="mockup-body" style="font-size:13px;padding:12px;">
+          <div style="background:#f9f9f9;border-radius:6px;padding:10px;margin-bottom:6px;">
+            <div style="font-size:11px;color:#888;">Maandag</div>
+            <div style="font-weight:500;">Gegrilde zalm met quinoa</div>
+          </div>
+          <div style="background:#f9f9f9;border-radius:6px;padding:10px;margin-bottom:6px;">
+            <div style="font-size:11px;color:#888;">Dinsdag</div>
+            <div style="font-weight:500;">Kippenborst met groenten</div>
+          </div>
+          <div style="font-size:11px;color:#aaa;text-align:center;padding:4px 0;">· · ·</div>
+          <div style="border-top:2px solid #e8f4e8;margin-top:10px;padding-top:10px;">
+            <div style="font-size:11px;font-weight:600;color:#5a7a5a;margin-bottom:6px;">♻ RESTVERWERKING</div>
+            <div style="background:#f0f7f0;border-radius:6px;padding:10px;margin-bottom:6px;">
+              <div style="font-weight:500;font-size:13px;">Quinoa-groenteschotel</div>
+              <div style="font-size:11px;color:#666;margin-top:3px;">Gebruikt: restjes quinoa, halve courgette</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Aparte sectie onderaan de pagina</h3>
+      <p>De hoofdmaaltijden + totaalbedrag + knoppen blijven samen. Daarna een duidelijk gescheiden kaart "Wat doe je met de restjes?" met de suggesties.</p>
+      <div class="mockup" style="margin-top:12px;">
+        <div class="mockup-header">Maaltijdplan — preview</div>
+        <div class="mockup-body" style="font-size:13px;padding:12px;">
+          <div style="background:#f9f9f9;border-radius:6px;padding:10px;margin-bottom:6px;">
+            <div style="font-size:11px;color:#888;">Maandag</div>
+            <div style="font-weight:500;">Gegrilde zalm met quinoa</div>
+          </div>
+          <div style="font-size:11px;color:#aaa;text-align:center;padding:4px 0;">· · ·</div>
+          <div style="background:white;border:1px solid #ddd;border-radius:8px;padding:12px;margin-top:10px;">
+            <div style="display:flex;justify-content:space-between;">
+              <span style="font-size:13px;color:#666;">Geschat totaal</span>
+              <span style="font-weight:600;">€47.50</span>
+            </div>
+          </div>
+          <div style="background:#111;color:white;border-radius:8px;padding:10px;text-align:center;margin-top:8px;font-size:13px;font-weight:500;">Toevoegen aan winkelwagen</div>
+          <div style="background:#f0f7f0;border:1px solid #c8e6c8;border-radius:8px;padding:12px;margin-top:12px;">
+            <div style="font-size:12px;font-weight:600;color:#2e7d32;margin-bottom:8px;">♻ Wat doe je met de restjes?</div>
+            <div style="font-size:13px;font-weight:500;">Quinoa-groenteschotel</div>
+            <div style="font-size:11px;color:#666;margin-top:2px;">Gebruikt: restjes quinoa, halve courgette</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

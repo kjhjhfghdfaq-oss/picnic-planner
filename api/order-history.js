@@ -18,8 +18,9 @@ module.exports = async (req, res) => {
     const dashboard = {
       spending: analyze.aggregateSpending(deliveries, now),
       topProducts: analyze.topProducts(deliveries, 5),
-      s5: analyze.s5Distribution(deliveries),
       rhythm: analyze.orderRhythm(deliveries),
+      // productlijst voor de async S5-classificatie (zie /api/classify-s5)
+      products: analyze.productTotals(deliveries).map(p => ({ productId: p.productId, name: p.name, spendCents: p.spendCents })),
     };
     res.status(200).json({ deliveryCount: deliveries.length, dashboard });
   } catch (err) {

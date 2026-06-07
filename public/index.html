@@ -257,18 +257,9 @@ async function loadDashboard() {
       options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
     });
 
-    // S5-donut
-    const buckets = Object.keys(S5_LABELS);
-    if (dashChartS5) dashChartS5.destroy();
-    dashChartS5 = new Chart(document.getElementById('dash-s5'), {
-      type: 'doughnut',
-      data: {
-        labels: buckets.map(b => S5_LABELS[b]),
-        datasets: [{ data: buckets.map(b => d.s5.shares[b]), backgroundColor: ['#43a047','#c0ca33','#e53935','#1e88e5','#fb8c00','#9e9e9e'] }],
-      },
-      options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } },
-    });
-    document.getElementById('dash-fresh').textContent = `Groente & fruit: ${d.s5.freshPct}% van je uitgaven`;
+    // S5-donut: async geclassificeerd (Haiku, gecachet) zodat het de rest niet ophoudt
+    document.getElementById('dash-fresh').textContent = 'Producten indelen…';
+    loadS5(d.products);
 
     // Top-producten
     document.getElementById('dash-top').innerHTML = `
@@ -287,9 +278,33 @@ async function loadDashboard() {
         Gemiddeld elke <b>${esc(d.rhythm.avgDaysBetween)}</b> dagen · <b>${esc(d.rhythm.avgItemsPerOrder)}</b> producten per bestelling · <b>${esc(d.rhythm.orderCount)}</b> bestellingen
       </div>`;
 
-    loadInsights(d);
+    loadInsights({ spending: d.spending, topProducts: d.topProducts, rhythm: d.rhythm });
   } catch (e) {
     document.getElementById('dash-kpis').innerHTML = '<div class="empty error">Fout: ' + esc(e.message) + '</div>';
+  }
+}
+
+async function loadS5(products) {
+  try {
+    const res = await fetch('/api/classify-s5', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ products: products || [] }),
+    });
+    const data = await res.json();
+    const s5 = data.s5 || { shares: {}, freshPct: 0 };
+    const buckets = Object.keys(S5_LABELS);
+    if (dashChartS5) dashChartS5.destroy();
+    dashChartS5 = new Chart(document.getElementById('dash-s5'), {
+      type: 'doughnut',
+      data: {
+        labels: buckets.map(b => S5_LABELS[b]),
+        datasets: [{ data: buckets.map(b => (s5.shares[b] || 0)), backgroundColor: ['#43a047','#c0ca33','#e53935','#1e88e5','#fb8c00','#9e9e9e'] }],
+      },
+      options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } },
+    });
+    document.getElementById('dash-fresh').textContent = `Groente & fruit: ${s5.freshPct || 0}% van je uitgaven`;
+  } catch (_) {
+    document.getElementById('dash-fresh').textContent = 'Indeling niet beschikbaar';
   }
 }
 

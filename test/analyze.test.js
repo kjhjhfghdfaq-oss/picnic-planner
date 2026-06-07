@@ -234,3 +234,50 @@ test('dueProducts negeert producten met onregelmatig interval (CV-filter)', () =
   const r = dueProducts(fixture, '2026-06-01T10:00:00.000Z');
   assert.ok(!r.find(x => x.productId === 'q1'), 'onregelmatig product mag niet due zijn');
 });
+
+const { productTotals, s5SharesFromProductSpend } = require('../api/_lib/analyze');
+
+const TOTALS_FIXTURE = [
+  { id: 'a', date: '2026-05-01T10:00:00.000Z', totalCents: 0, items: [
+    { productId: 'p1', name: 'Bruiswater', count: 6, priceCents: 600, category: '' },
+    { productId: 'p2', name: 'Melk', count: 2, priceCents: 300, category: '' },
+  ]},
+  { id: 'b', date: '2026-05-08T10:00:00.000Z', totalCents: 0, items: [
+    { productId: 'p1', name: 'Bruiswater', count: 6, priceCents: 600, category: '' },
+  ]},
+];
+
+test('productTotals telt aantal en uitgaven per uniek product', () => {
+  const r = productTotals(TOTALS_FIXTURE);
+  const p1 = r.find(x => x.productId === 'p1');
+  const p2 = r.find(x => x.productId === 'p2');
+  assert.deepStrictEqual(p1, { productId: 'p1', name: 'Bruiswater', count: 12, spendCents: 1200 });
+  assert.deepStrictEqual(p2, { productId: 'p2', name: 'Melk', count: 2, spendCents: 300 });
+  assert.deepStrictEqual(productTotals([]), []);
+});
+
+test('s5SharesFromProductSpend deelt uitgaven in via bucket-map', () => {
+  const products = [
+    { productId: 'p1', spendCents: 200 },
+    { productId: 'p2', spendCents: 200 },
+    { productId: 'p3', spendCents: 600 },
+  ];
+  const map = { p1: 'groente_fruit', p2: 'granen' }; // p3 onbekend => buiten
+  const r = s5SharesFromProductSpend(products, map);
+  assert.strictEqual(r.shares.groente_fruit, 20);
+  assert.strictEqual(r.shares.granen, 20);
+  assert.strictEqual(r.shares.buiten, 60);
+  assert.strictEqual(r.shares.eiwit, 0);
+  assert.strictEqual(r.freshPct, 20);
+});
+
+test('s5SharesFromProductSpend valt ongeldige bucket terug op buiten', () => {
+  const r = s5SharesFromProductSpend([{ productId: 'x', spendCents: 100 }], { x: 'onzin' });
+  assert.strictEqual(r.shares.buiten, 100);
+});
+
+test('s5SharesFromProductSpend leeg => nul', () => {
+  const r = s5SharesFromProductSpend([], {});
+  assert.strictEqual(r.freshPct, 0);
+  assert.strictEqual(r.shares.granen, 0);
+});
