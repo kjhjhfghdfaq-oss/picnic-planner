@@ -17,10 +17,8 @@ module.exports = async (req, res) => {
 
   // Probeer de mogelijke list-endpoints/methodes.
   const probes = [
-    ['POST /deliveries/summary {}', { method: 'POST', path: '/deliveries/summary', auth, body: {} }],
-    ['GET /deliveries/summary', { method: 'GET', path: '/deliveries/summary', auth }],
+    ['POST /deliveries/summary []', { method: 'POST', path: '/deliveries/summary', auth, body: [] }],
     ['POST /deliveries []', { method: 'POST', path: '/deliveries', auth, body: [] }],
-    ['POST /deliveries {}', { method: 'POST', path: '/deliveries', auth, body: {} }],
   ];
 
   let firstList = null;
