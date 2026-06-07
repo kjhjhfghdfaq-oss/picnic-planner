@@ -20,6 +20,10 @@ module.exports = async (req, res) => {
 
     // Huidige mand ophalen om dubbel toevoegen te voorkomen.
     const cart = await picnicRequest({ method: 'GET', path: '/cart', auth });
+    if (cart.status < 200 || cart.status >= 300) {
+      res.status(502).json({ error: 'Mand ophalen mislukt' });
+      return;
+    }
     const inCart = new Set();
     for (const line of (cart.json?.items || [])) {
       const art = (line.items && line.items[0]) || {};
@@ -30,12 +34,13 @@ module.exports = async (req, res) => {
     const added = [], skipped = [], productIds = [];
     for (const p of due) {
       if (inCart.has(p.productId)) { skipped.push({ name: p.name, reason: 'al in mand' }); continue; }
+      const qty = Math.max(1, p.usualQty);
       const r = await picnicRequest({
         method: 'POST', path: '/cart/add_product', auth,
-        body: { product_id: `s${p.productId}`, count: p.usualQty },
+        body: { product_id: `s${p.productId}`, count: qty },
       });
       if (r.status >= 200 && r.status < 300) {
-        added.push({ name: p.name, count: p.usualQty });
+        added.push({ name: p.name, count: qty });
         productIds.push(p.productId);
       } else {
         skipped.push({ name: p.name, reason: 'niet leverbaar' });
