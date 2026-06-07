@@ -139,3 +139,32 @@ test('s5Distribution geeft nul-shares bij lege input', () => {
   assert.strictEqual(r.freshPct, 0);
   assert.strictEqual(r.shares.groente_fruit, 0);
 });
+
+const { orderRhythm } = require('../api/_lib/analyze');
+
+const RHYTHM_FIXTURE = [
+  { id: 'a', date: '2026-05-01T10:00:00.000Z', totalCents: 0, items: [{ productId:'p1', name:'x', count:2, priceCents:0, category:'' }] },
+  { id: 'b', date: '2026-05-08T10:00:00.000Z', totalCents: 0, items: [{ productId:'p1', name:'x', count:4, priceCents:0, category:'' }] },
+  { id: 'c', date: '2026-05-15T10:00:00.000Z', totalCents: 0, items: [{ productId:'p1', name:'x', count:6, priceCents:0, category:'' }] },
+];
+
+test('orderRhythm berekent gemiddeld aantal dagen tussen bestellingen', () => {
+  const r = orderRhythm(RHYTHM_FIXTURE);
+  assert.strictEqual(r.avgDaysBetween, 7); // 1->8->15 = 7 dagen telkens
+});
+
+test('orderRhythm berekent gemiddeld aantal producten per bestelling', () => {
+  const r = orderRhythm(RHYTHM_FIXTURE);
+  assert.strictEqual(r.avgItemsPerOrder, 4); // (2+4+6)/3
+});
+
+test('orderRhythm telt bestellingen', () => {
+  assert.strictEqual(orderRhythm(RHYTHM_FIXTURE).orderCount, 3);
+});
+
+test('orderRhythm is veilig bij 0 of 1 bestelling', () => {
+  assert.deepStrictEqual(orderRhythm([]), { avgDaysBetween: 0, avgItemsPerOrder: 0, orderCount: 0 });
+  const one = orderRhythm([RHYTHM_FIXTURE[0]]);
+  assert.strictEqual(one.avgDaysBetween, 0);
+  assert.strictEqual(one.orderCount, 1);
+});

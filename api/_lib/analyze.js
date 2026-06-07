@@ -92,4 +92,24 @@ function s5Distribution(deliveries) {
   return { shares, freshPct: shares.groente_fruit };
 }
 
-module.exports = { S5_BUCKETS, mapCategoryToS5, aggregateSpending, topProducts, s5Distribution };
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function orderRhythm(deliveries) {
+  const orderCount = deliveries.length;
+  if (orderCount === 0) return { avgDaysBetween: 0, avgItemsPerOrder: 0, orderCount: 0 };
+
+  const sorted = [...deliveries].sort((a, b) => new Date(a.date) - new Date(b.date));
+  let totalGapDays = 0;
+  for (let i = 1; i < sorted.length; i++) {
+    totalGapDays += (new Date(sorted[i].date) - new Date(sorted[i - 1].date)) / DAY_MS;
+  }
+  const avgDaysBetween = sorted.length > 1 ? Math.round(totalGapDays / (sorted.length - 1)) : 0;
+
+  const totalItems = deliveries.reduce(
+    (s, d) => s + (d.items || []).reduce((n, it) => n + (it.count || 0), 0), 0);
+  const avgItemsPerOrder = Math.round(totalItems / orderCount);
+
+  return { avgDaysBetween, avgItemsPerOrder, orderCount };
+}
+
+module.exports = { S5_BUCKETS, mapCategoryToS5, aggregateSpending, topProducts, s5Distribution, orderRhythm };
