@@ -51,4 +51,27 @@ function aggregateSpending(deliveries, nowIso) {
   return { byMonth, totalThisMonthCents, avgBasketCents, trendPct };
 }
 
-module.exports = { S5_BUCKETS, mapCategoryToS5, aggregateSpending };
+function topProducts(deliveries, limit = 5) {
+  const acc = new Map(); // productId -> { name, count, spendCents }
+  for (const d of deliveries) {
+    for (const it of d.items || []) {
+      const cur = acc.get(it.productId) || { name: it.name, count: 0, spendCents: 0 };
+      cur.count += it.count || 0;
+      cur.spendCents += it.priceCents || 0;
+      cur.name = it.name || cur.name;
+      acc.set(it.productId, cur);
+    }
+  }
+  const rows = [...acc.entries()].map(([productId, v]) => ({ productId, ...v }));
+  const byCount = [...rows]
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit)
+    .map(({ productId, name, count }) => ({ productId, name, count }));
+  const bySpend = [...rows]
+    .sort((a, b) => b.spendCents - a.spendCents)
+    .slice(0, limit)
+    .map(({ productId, name, spendCents }) => ({ productId, name, spendCents }));
+  return { byCount, bySpend };
+}
+
+module.exports = { S5_BUCKETS, mapCategoryToS5, aggregateSpending, topProducts };

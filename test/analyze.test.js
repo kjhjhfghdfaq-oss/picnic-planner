@@ -75,3 +75,37 @@ test('aggregateSpending geeft nulwaarden bij lege historie', () => {
   assert.strictEqual(r.avgBasketCents, 0);
   assert.strictEqual(r.trendPct, 0);
 });
+
+const { topProducts } = require('../api/_lib/analyze');
+
+const PRODUCT_FIXTURE = [
+  { id: 'a', date: '2026-05-01T10:00:00.000Z', totalCents: 0, items: [
+    { productId: 'p1', name: 'Bruiswater', count: 6, priceCents: 600, category: 'Frisdrank' },
+    { productId: 'p2', name: 'Melk', count: 2, priceCents: 300, category: 'Zuivel & eieren' },
+  ]},
+  { id: 'b', date: '2026-05-08T10:00:00.000Z', totalCents: 0, items: [
+    { productId: 'p1', name: 'Bruiswater', count: 6, priceCents: 600, category: 'Frisdrank' },
+    { productId: 'p3', name: 'Zalm', count: 1, priceCents: 900, category: 'Vis & zeevruchten' },
+  ]},
+];
+
+test('topProducts sorteert op aantal', () => {
+  const r = topProducts(PRODUCT_FIXTURE, 2);
+  assert.deepStrictEqual(r.byCount, [
+    { productId: 'p1', name: 'Bruiswater', count: 12 },
+    { productId: 'p2', name: 'Melk', count: 2 },
+  ]);
+});
+
+test('topProducts sorteert op uitgaven', () => {
+  const r = topProducts(PRODUCT_FIXTURE, 2);
+  assert.deepStrictEqual(r.bySpend, [
+    { productId: 'p1', name: 'Bruiswater', spendCents: 1200 },
+    { productId: 'p3', name: 'Zalm', spendCents: 900 },
+  ]);
+});
+
+test('topProducts respecteert limit en lege input', () => {
+  assert.strictEqual(topProducts(PRODUCT_FIXTURE, 1).byCount.length, 1);
+  assert.deepStrictEqual(topProducts([], 5), { byCount: [], bySpend: [] });
+});
