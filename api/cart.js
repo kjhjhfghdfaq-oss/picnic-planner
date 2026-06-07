@@ -9,7 +9,7 @@ module.exports = async (req, res) => {
   const body = JSON.stringify(req.body || {});
   const options = {
     hostname: "storefront-prod.nl.picnicinternational.com",
-    path: "/api/15/cart/add_product",
+    path: (req.body && req.body.action === 'remove') ? "/api/15/cart/remove_product" : "/api/15/cart/add_product",
     method: "POST",
     headers: {
       "Content-Type": "application/json; charset=UTF-8",

@@ -115,7 +115,9 @@ button.secondary { background: white; color: #111; border: 1px solid #ddd; margi
       </div>
       <div id="cart-items"><div class="empty">Laden...</div></div>
     </div>
+    <button onclick="addRestock('cart')">Vul mijn vaste boodschappen aan</button>
     <button class="secondary" onclick="loadCart()">Vernieuwen</button>
+    <div class="status" id="restock-status-cart"></div>
   </div>
 
   <div id="tab-recepten">
@@ -310,6 +312,47 @@ async function loadInsights(dashboard) {
   }
 }
 
+const RESTOCK_KEY = 'picnic_autoadded';
+function loadAutoAdded() { try { return JSON.parse(localStorage.getItem(RESTOCK_KEY) || '[]'); } catch(_) { return []; } }
+function saveAutoAdded(ids) { try { localStorage.setItem(RESTOCK_KEY, JSON.stringify(ids)); } catch(_) {} }
+
+async function addRestock(where) {
+  const statusId = 'restock-status-' + where;
+  setStatus(statusId, 'Patroon analyseren...');
+  try {
+    const res = await fetch(`/api/predict-restock?auth=${encodeURIComponent(authKey)}`, { method: 'POST' });
+    if (res.status === 401) { setStatus(statusId, 'Sessie verlopen — log opnieuw in.', 'error'); return; }
+    const data = await res.json();
+    if (!data.added || data.added.length === 0) {
+      setStatus(statusId, 'Niets toe te voegen — je vaste producten staan al in de mand of er is te weinig historie.', '');
+      return;
+    }
+    // markeer auto-toegevoegde producten lokaal (voor badge + undo)
+    const ids = loadAutoAdded();
+    for (const pid of data.productIds) if (!ids.includes(pid)) ids.push(pid);
+    saveAutoAdded(ids);
+
+    const summary = data.added.map(a => `${a.name} ×${a.count}`).join(', ');
+    setStatus(statusId, 'Toegevoegd: ' + summary, 'success');
+    if (where === 'cart') loadCart();
+  } catch (e) {
+    setStatus(statusId, 'Fout: ' + e.message, 'error');
+  }
+}
+
+async function undoRestock() {
+  const ids = loadAutoAdded();
+  if (ids.length === 0) return;
+  for (const pid of ids) {
+    await fetch(`/api/cart?auth=${encodeURIComponent(authKey)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'remove', product_id: `s${pid}`, count: 99 }),
+    }).catch(() => {});
+  }
+  saveAutoAdded([]);
+  loadCart();
+}
+
 const DAGEN = ["Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag","Zondag"];
 
 function showStep(s) {
@@ -427,11 +470,17 @@ async function loadCart() {
       const unit = art.unit_quantity ? ` <span style="color:#999;font-size:12px;">${esc(art.unit_quantity)}</span>` : '';
       const qty = (line.items && line.items.length) || 1;
       const price = (line.display_price||0)/100;
+      const autoIds = loadAutoAdded();
+      const pid = (art.id || line.id || '').replace(/^s/, '');
+      const badge = autoIds.includes(pid) ? ` <span style="font-size:11px;color:#2e7d32;">♻ automatisch</span>` : '';
       html+=`<div class="cart-item">
-        <span class="cart-item-name">${esc(name)}${unit}</span>
+        <span class="cart-item-name">${esc(name)}${unit}${badge}</span>
         <span class="cart-item-qty">${qty}x</span>
         <span class="cart-item-price">€${price.toFixed(2)}</span>
       </div>`;
+    }
+    if (loadAutoAdded().length > 0) {
+      html += `<button class="secondary" style="margin-top:8px;" onclick="undoRestock()">Automatisch toegevoegde verwijderen</button>`;
     }
     const totalCents = data?.total_price ?? data?.checkout_total_price ?? 0;
     document.getElementById('cart-items').innerHTML=html;
