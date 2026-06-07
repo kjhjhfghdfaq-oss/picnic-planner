@@ -15,7 +15,13 @@ function mapCategoryToS5(category) {
   const c = String(category || '').toLowerCase();
   if (!c) return 'buiten';
   for (const [bucket, keywords] of S5_KEYWORDS) {
-    if (keywords.some(k => c.includes(k))) return bucket;
+    if (keywords.some(k => {
+      const i = c.indexOf(k);
+      if (i === -1) return false;
+      const pre = i === 0 || !/\w/.test(c[i - 1]);
+      const post = i + k.length >= c.length || !/\w/.test(c[i + k.length]);
+      return pre && post;
+    })) return bucket;
   }
   return 'buiten';
 }

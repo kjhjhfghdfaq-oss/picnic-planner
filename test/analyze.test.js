@@ -32,6 +32,11 @@ test('mapCategoryToS5 valt terug op buiten voor onbekend', () => {
   assert.strictEqual(mapCategoryToS5(undefined), 'buiten');
 });
 
+test('mapCategoryToS5 matcht niet op deel-substrings', () => {
+  assert.strictEqual(mapCategoryToS5('Conserven & provisies'), 'buiten'); // niet eiwit via "vis"
+  assert.strictEqual(mapCategoryToS5('Reinigingsmiddelen'), 'buiten');    // niet zuivel via "ei"
+});
+
 test('S5_BUCKETS bevat de zes vakken', () => {
   assert.deepStrictEqual(S5_BUCKETS, ['groente_fruit','granen','eiwit','zuivel','vetten','buiten']);
 });
@@ -203,7 +208,7 @@ test('dueProducts negeert producten met < 3 bestellingen', () => {
   assert.ok(!r.find(x => x.productId === 'p2'), 'p2 (1x) mag niet voorkomen');
 });
 
-test('dueProducts negeert onregelmatige producten', () => {
+test('dueProducts negeert producten met te weinig bestellingen (p3)', () => {
   // p3 besteld op 1 mei en 15 mei (gat 14d) - maar slechts 2x => valt al af op minOrders
   const r = dueProducts(DUE_FIXTURE, '2026-05-22T10:00:00.000Z');
   assert.ok(!r.find(x => x.productId === 'p3'), 'p3 mag niet voorkomen');
@@ -217,4 +222,15 @@ test('dueProducts laat product weg dat nog niet toe is', () => {
 
 test('dueProducts is leeg bij lege input', () => {
   assert.deepStrictEqual(dueProducts([], '2026-05-22T10:00:00.000Z'), []);
+});
+
+test('dueProducts negeert producten met onregelmatig interval (CV-filter)', () => {
+  const fixture = [
+    { id: 'x1', date: '2026-04-01T10:00:00.000Z', totalCents: 0, items: [{ productId: 'q1', name: 'Onregelmatig', count: 1, priceCents: 100, category: '' }] },
+    { id: 'x2', date: '2026-04-02T10:00:00.000Z', totalCents: 0, items: [{ productId: 'q1', name: 'Onregelmatig', count: 1, priceCents: 100, category: '' }] },
+    { id: 'x3', date: '2026-05-02T10:00:00.000Z', totalCents: 0, items: [{ productId: 'q1', name: 'Onregelmatig', count: 1, priceCents: 100, category: '' }] },
+  ];
+  // gaps 1 dag en 30 dagen => zeer onregelmatig (CV hoog) => uitgesloten
+  const r = dueProducts(fixture, '2026-06-01T10:00:00.000Z');
+  assert.ok(!r.find(x => x.productId === 'q1'), 'onregelmatig product mag niet due zijn');
 });
