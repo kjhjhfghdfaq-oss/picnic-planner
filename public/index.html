@@ -343,13 +343,15 @@ async function addRestock(where) {
 async function undoRestock() {
   const ids = loadAutoAdded();
   if (ids.length === 0) return;
+  const failed = [];
   for (const pid of ids) {
-    await fetch(`/api/cart?auth=${encodeURIComponent(authKey)}`, {
+    const ok = await fetch(`/api/cart?auth=${encodeURIComponent(authKey)}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'remove', product_id: `s${pid}`, count: 99 }),
-    }).catch(() => {});
+      body: JSON.stringify({ action: 'remove', product_id: `s${pid}`, count: 99 }), // count hoog: Picnic verwijdert de hele regel
+    }).then(r => r.ok).catch(() => false);
+    if (!ok) failed.push(pid); // mislukt: in de lijst houden zodat badge + retry blijven
   }
-  saveAutoAdded([]);
+  saveAutoAdded(failed);
   loadCart();
 }
 
