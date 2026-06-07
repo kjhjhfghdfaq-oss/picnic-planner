@@ -168,3 +168,53 @@ test('orderRhythm is veilig bij 0 of 1 bestelling', () => {
   assert.strictEqual(one.avgDaysBetween, 0);
   assert.strictEqual(one.orderCount, 1);
 });
+
+const { dueProducts } = require('../api/_lib/analyze');
+
+// p1: elke ~7 dagen besteld, 6 stuks => regelmatig, due
+// p2: maar 1 keer besteld => valt af
+// p3: zeer onregelmatig => valt af
+const DUE_FIXTURE = [
+  { id: 'd1', date: '2026-05-01T10:00:00.000Z', totalCents: 0, items: [
+    { productId: 'p1', name: 'Bruiswater', count: 6, priceCents: 600, category: 'Frisdrank' },
+    { productId: 'p3', name: 'Kokosmelk', count: 1, priceCents: 150, category: '' },
+  ]},
+  { id: 'd2', date: '2026-05-08T10:00:00.000Z', totalCents: 0, items: [
+    { productId: 'p1', name: 'Bruiswater', count: 6, priceCents: 600, category: 'Frisdrank' },
+  ]},
+  { id: 'd3', date: '2026-05-15T10:00:00.000Z', totalCents: 0, items: [
+    { productId: 'p1', name: 'Bruiswater', count: 6, priceCents: 600, category: 'Frisdrank' },
+    { productId: 'p2', name: 'Eenmalig item', count: 1, priceCents: 100, category: '' },
+    { productId: 'p3', name: 'Kokosmelk', count: 1, priceCents: 150, category: '' },
+  ]},
+];
+
+test('dueProducts vindt regelmatig product dat toe is', () => {
+  // now = 7 dagen na laatste bestelling van p1 (15 mei) => due
+  const r = dueProducts(DUE_FIXTURE, '2026-05-22T10:00:00.000Z');
+  const p1 = r.find(x => x.productId === 'p1');
+  assert.ok(p1, 'p1 zou due moeten zijn');
+  assert.strictEqual(p1.usualQty, 6);
+  assert.strictEqual(p1.avgIntervalDays, 7);
+});
+
+test('dueProducts negeert producten met < 3 bestellingen', () => {
+  const r = dueProducts(DUE_FIXTURE, '2026-05-22T10:00:00.000Z');
+  assert.ok(!r.find(x => x.productId === 'p2'), 'p2 (1x) mag niet voorkomen');
+});
+
+test('dueProducts negeert onregelmatige producten', () => {
+  // p3 besteld op 1 mei en 15 mei (gat 14d) - maar slechts 2x => valt al af op minOrders
+  const r = dueProducts(DUE_FIXTURE, '2026-05-22T10:00:00.000Z');
+  assert.ok(!r.find(x => x.productId === 'p3'), 'p3 mag niet voorkomen');
+});
+
+test('dueProducts laat product weg dat nog niet toe is', () => {
+  // now = 1 dag na laatste bestelling => nog niet toe (interval 7)
+  const r = dueProducts(DUE_FIXTURE, '2026-05-16T10:00:00.000Z');
+  assert.ok(!r.find(x => x.productId === 'p1'), 'p1 nog niet toe');
+});
+
+test('dueProducts is leeg bij lege input', () => {
+  assert.deepStrictEqual(dueProducts([], '2026-05-22T10:00:00.000Z'), []);
+});

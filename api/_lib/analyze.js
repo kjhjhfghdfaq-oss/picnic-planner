@@ -112,4 +112,61 @@ function orderRhythm(deliveries) {
   return { avgDaysBetween, avgItemsPerOrder, orderCount };
 }
 
-module.exports = { S5_BUCKETS, mapCategoryToS5, aggregateSpending, topProducts, s5Distribution, orderRhythm };
+function mostCommon(values) {
+  const counts = new Map();
+  for (const v of values) counts.set(v, (counts.get(v) || 0) + 1);
+  let best = values[0], bestN = 0;
+  for (const [v, n] of counts) if (n > bestN) { best = v; bestN = n; }
+  return best;
+}
+
+function dueProducts(deliveries, nowIso, opts = {}) {
+  const minOrders = opts.minOrders || 3;
+  const maxCv = opts.maxCv || 0.5;       // max variatiecoëfficiënt op de intervallen
+  const dueRatio = opts.dueRatio || 0.8; // due als daysSince >= avgInterval * dueRatio
+  const now = new Date(nowIso);
+
+  // verzamel per product: besteldatums + counts
+  const byProduct = new Map();
+  for (const d of deliveries) {
+    for (const it of d.items || []) {
+      const cur = byProduct.get(it.productId) || { name: it.name, dates: [], counts: [] };
+      cur.dates.push(new Date(d.date));
+      cur.counts.push(it.count || 1);
+      cur.name = it.name || cur.name;
+      byProduct.set(it.productId, cur);
+    }
+  }
+
+  const result = [];
+  for (const [productId, info] of byProduct) {
+    if (info.dates.length < minOrders) continue;
+    const dates = [...info.dates].sort((a, b) => a - b);
+    const gaps = [];
+    for (let i = 1; i < dates.length; i++) gaps.push((dates[i] - dates[i - 1]) / DAY_MS);
+    const avg = gaps.reduce((s, g) => s + g, 0) / gaps.length;
+    if (avg <= 0) continue;
+    const variance = gaps.reduce((s, g) => s + (g - avg) ** 2, 0) / gaps.length;
+    const cv = Math.sqrt(variance) / avg;
+    if (cv > maxCv) continue; // te onregelmatig
+
+    const lastOrdered = dates[dates.length - 1];
+    const daysSince = (now - lastOrdered) / DAY_MS;
+    if (daysSince < avg * dueRatio) continue; // nog niet toe
+
+    result.push({
+      productId,
+      name: info.name,
+      usualQty: mostCommon(info.counts),
+      avgIntervalDays: Math.round(avg),
+      lastOrdered: lastOrdered.toISOString(),
+      daysSince: Math.round(daysSince),
+    });
+  }
+  return result.sort((a, b) => b.daysSince - a.daysSince);
+}
+
+module.exports = {
+  S5_BUCKETS, mapCategoryToS5, aggregateSpending,
+  topProducts, s5Distribution, orderRhythm, dueProducts,
+};
