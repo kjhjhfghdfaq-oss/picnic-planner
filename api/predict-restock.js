@@ -2,6 +2,14 @@
 const { getNormalizedDeliveries } = require('./_lib/orders');
 const { stapleProducts } = require('./_lib/analyze');
 const { picnicRequest } = require('./_lib/picnic');
+const { searchTopProduct } = require('./_lib/search');
+
+// Losse naam-match: voorkomt dat de zoek-fallback een verkeerd product toevoegt.
+function namesMatch(a, b) {
+  const x = String(a || '').toLowerCase().trim();
+  const y = String(b || '').toLowerCase().trim();
+  return !!x && !!y && (x === y || x.includes(y) || y.includes(x));
+}
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -15,54 +23,62 @@ module.exports = async (req, res) => {
 
   try {
     const deliveries = await getNormalizedDeliveries(auth);
-    const due = stapleProducts(deliveries, { minFraction: 0.7 });
-    if (due.length === 0) { res.status(200).json({ added: [], skipped: [], productIds: [] }); return; }
+    const staples = stapleProducts(deliveries, { minFraction: 0.7 });
+    if (staples.length === 0) { res.status(200).json({ added: [], alreadyInCart: [], failed: [], productIds: [] }); return; }
 
-    // Product-IDs uit een mand-respons halen (s-prefix gestript).
-    const cartIds = (cart) => {
-      const s = new Set();
+    // Index van een mand-respons: namen (lowercase) + stripped productId per naam.
+    const cartIndex = (cart) => {
+      const names = new Set(); const idByName = new Map();
       for (const line of (cart.json?.items || [])) {
         const art = (line.items && line.items[0]) || {};
         const pid = (art.id || line.id || '').replace(/^s/, '');
-        if (pid) s.add(pid);
+        const nm = (art.name || '').toLowerCase();
+        if (nm) { names.add(nm); if (pid) idByName.set(nm, pid); }
       }
-      return s;
+      return { names, idByName };
     };
+    const getCartIndex = async () => {
+      const c = await picnicRequest({ method: 'GET', path: '/cart', auth });
+      if (c.status < 200 || c.status >= 300) return null;
+      return cartIndex(c);
+    };
+    const addProduct = (id, count) => picnicRequest({
+      method: 'POST', path: '/cart/add_product', auth,
+      body: { product_id: id, count: Math.max(1, count) },
+    });
 
-    // Huidige mand ophalen om dubbel toevoegen te voorkomen.
-    const cartBefore = await picnicRequest({ method: 'GET', path: '/cart', auth });
-    if (cartBefore.status < 200 || cartBefore.status >= 300) {
-      res.status(502).json({ error: 'Mand ophalen mislukt' });
-      return;
+    const before = await getCartIndex();
+    if (!before) { res.status(502).json({ error: 'Mand ophalen mislukt' }); return; }
+
+    // Wat zit al in de mand (op naam) → overslaan.
+    const alreadyInCart = [], toAdd = [];
+    for (const s of staples) {
+      if (before.names.has(s.name.toLowerCase())) alreadyInCart.push(s.name);
+      else toAdd.push(s);
     }
-    const inCartBefore = cartIds(cartBefore);
 
-    // Probeer alles toe te voegen wat nog niet in de mand zit.
-    const alreadyInCart = [], attempts = [];
-    for (const p of due) {
-      if (inCartBefore.has(p.productId)) { alreadyInCart.push(p.name); continue; }
-      const qty = Math.max(1, p.usualQty);
-      await picnicRequest({
-        method: 'POST', path: '/cart/add_product', auth,
-        body: { product_id: `s${p.productId}`, count: qty },
-      });
-      attempts.push({ productId: p.productId, name: p.name, count: qty });
+    // Fase 1: meest recente SKU uit de historie.
+    for (const s of toAdd) await addProduct(`s${s.productId}`, s.usualQty);
+    let idx = (await getCartIndex()) || before;
+
+    // Fase 2: zoek-fallback voor wat nog niet in de mand staat (SKU gewijzigd/verdwenen).
+    for (const s of toAdd) {
+      if (idx.names.has(s.name.toLowerCase())) continue;
+      const hit = await searchTopProduct(auth, s.name);
+      if (hit && namesMatch(hit.name, s.name)) await addProduct(hit.id, s.usualQty);
     }
+    const finalIdx = (await getCartIndex()) || idx;
 
-    // VERIFIEER tegen de mand: een 2xx van add_product betekent niet altijd dat het product
-    // echt is toegevoegd (bijv. verouderde SKU). Alleen wat nu echt in de mand staat telt.
+    // Resultaat = wat er nu ÉCHT in de mand staat (op naam geverifieerd).
     const added = [], failed = [], productIds = [];
-    if (attempts.length) {
-      const cartAfter = await picnicRequest({ method: 'GET', path: '/cart', auth });
-      const verified = (cartAfter.status >= 200 && cartAfter.status < 300) ? cartIds(cartAfter) : null;
-      for (const a of attempts) {
-        if (!verified || verified.has(a.productId)) {
-          // verified=null → mand-check zelf mislukt; dan poging vertrouwen (geen valse 'mislukt')
-          added.push({ name: a.name, count: a.count });
-          productIds.push(a.productId);
-        } else {
-          failed.push({ name: a.name });
-        }
+    for (const s of toAdd) {
+      const nm = s.name.toLowerCase();
+      if (finalIdx.names.has(nm)) {
+        added.push({ name: s.name, count: Math.max(1, s.usualQty) });
+        const id = finalIdx.idByName.get(nm);
+        if (id) productIds.push(id);
+      } else {
+        failed.push({ name: s.name });
       }
     }
     res.status(200).json({ added, alreadyInCart, failed, productIds });

@@ -112,26 +112,32 @@ function stapleProducts(deliveries, opts = {}) {
   const denom = recent.length;
   if (denom === 0) return [];
 
-  const byProduct = new Map(); // productId -> { name, deliveries, counts }
+  // Groepeer op NAAM, niet op productId: de SKU van een vast product kan in de tijd
+  // wijzigen. Onthoud de productId uit de MEEST RECENTE bestelling (grootste kans dat
+  // die SKU nog bestelbaar is); de zoek-fallback in predict-restock vangt de rest op.
+  const byName = new Map(); // naam(lower) -> { name, deliveries, counts, recentTime, recentProductId }
   for (const d of recent) {
+    const t = new Date(d.date).getTime();
     const seenInDelivery = new Set();
     for (const it of d.items || []) {
-      if (!it.productId) continue;
-      const cur = byProduct.get(it.productId) || { name: it.name, deliveries: 0, counts: [] };
-      if (!seenInDelivery.has(it.productId)) { cur.deliveries += 1; seenInDelivery.add(it.productId); }
+      if (!it.productId || !it.name) continue;
+      const key = it.name.toLowerCase();
+      const cur = byName.get(key) || { name: it.name, deliveries: 0, counts: [], recentTime: -1, recentProductId: null };
+      if (!seenInDelivery.has(key)) { cur.deliveries += 1; seenInDelivery.add(key); }
       cur.counts.push(it.count || 1);
       cur.name = it.name || cur.name;
-      byProduct.set(it.productId, cur);
+      if (t > cur.recentTime) { cur.recentTime = t; cur.recentProductId = it.productId; }
+      byName.set(key, cur);
     }
   }
 
   const result = [];
-  for (const [productId, info] of byProduct) {
+  for (const info of byName.values()) {
     if (info.deliveries < minOrders) continue;
     const frequency = info.deliveries / denom;
     if (frequency < minFraction) continue;
     result.push({
-      productId,
+      productId: info.recentProductId,
       name: info.name,
       usualQty: mostCommon(info.counts),
       frequencyPct: Math.round(frequency * 100),

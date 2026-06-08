@@ -170,6 +170,19 @@ test('stapleProducts is leeg bij lege input', () => {
   assert.deepStrictEqual(stapleProducts([], { minFraction: 0.7 }), []);
 });
 
+test('stapleProducts groepeert op naam en kiest de meest recente SKU', () => {
+  const fx = [
+    { id: 'd1', date: '2026-05-29T10:00:00.000Z', totalCents: 0, items: [{ productId: 'NEW', name: 'Bruiswater', count: 1, priceCents: 100, brand: 'huismerk' }] },
+    { id: 'd2', date: '2026-05-22T10:00:00.000Z', totalCents: 0, items: [{ productId: 'OLD', name: 'Bruiswater', count: 1, priceCents: 100, brand: 'huismerk' }] },
+    { id: 'd3', date: '2026-05-15T10:00:00.000Z', totalCents: 0, items: [{ productId: 'OLD', name: 'Bruiswater', count: 1, priceCents: 100, brand: 'huismerk' }] },
+  ];
+  const r = stapleProducts(fx, { minFraction: 0.7 });
+  assert.strictEqual(r.length, 1, 'één staple, gegroepeerd op naam');
+  assert.strictEqual(r[0].name, 'Bruiswater');
+  assert.strictEqual(r[0].productId, 'NEW', 'meest recente SKU gekozen');
+  assert.strictEqual(r[0].timesOrdered, 3);
+});
+
 const { productTotals } = require('../api/_lib/analyze');
 
 const TOTALS_FIXTURE = [
