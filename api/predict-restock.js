@@ -64,15 +64,19 @@ module.exports = async (req, res) => {
       else toAdd.push(s);
     }
 
+    // We voegen elk product met aantal 1 toe: dat komt gegarandeerd in de mand (een hoog
+    // aantal weigert Picnic soms boven het max-aantal) en voorkomt over-bestelling.
+    // Jij past de hoeveelheid daarna zelf aan in Picnic.
+
     // Fase 1: meest recente SKU uit de historie.
-    for (const s of toAdd) await addProduct(`s${s.productId}`, s.usualQty);
+    for (const s of toAdd) await addProduct(`s${s.productId}`, 1);
     let entries = (await getCart()) || before;
 
     // Fase 2: zoek-fallback voor wat nog niet in de mand staat (SKU gewijzigd/verdwenen).
     for (const s of toAdd) {
       if (inCart(entries, s.name)) continue;
       const hit = await searchTopProduct(auth, s.name);
-      if (hit && namesMatch(hit.name, s.name)) await addProduct(hit.id, s.usualQty);
+      if (hit && namesMatch(hit.name, s.name)) await addProduct(hit.id, 1);
     }
     const finalEntries = (await getCart()) || entries;
 
@@ -80,7 +84,7 @@ module.exports = async (req, res) => {
     const added = [], failed = [], productIds = [];
     for (const s of toAdd) {
       if (inCart(finalEntries, s.name)) {
-        added.push({ name: s.name, count: Math.max(1, s.usualQty) });
+        added.push({ name: s.name, count: 1 });
         const id = idFor(finalEntries, s.name);
         if (id) productIds.push(id);
       } else {
