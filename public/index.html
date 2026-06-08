@@ -711,7 +711,9 @@ async function loadCart() {
       const art = (line.items && line.items[0]) || {};
       const name = art.name || line.id;
       const unit = art.unit_quantity ? ` <span style="color:#999;font-size:12px;">${esc(art.unit_quantity)}</span>` : '';
-      const qty = (line.items && line.items.length) || 1;
+      // Echt aantal staat in de QUANTITY-decorator; line.items.length is altijd 1 per regel.
+      const qd = (art.decorators || []).find(d => d && d.type === 'QUANTITY');
+      const qty = (qd && qd.quantity) || (line.items && line.items.length) || 1;
       const price = (line.display_price||0)/100;
       const autoIds = loadAutoAdded();
       const pid = (art.id || line.id || '').replace(/^s/, '');
