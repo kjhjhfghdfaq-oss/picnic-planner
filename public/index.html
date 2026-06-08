@@ -125,19 +125,76 @@ button.secondary { background: white; color: #111; border: 1px solid #ddd; margi
   </div>
 
   <div id="tab-dashboard">
-    <div class="card" id="dash-kpis"><div class="empty">Laden...</div></div>
-    <div class="card"><canvas id="dash-spending" height="160"></canvas></div>
+    <!-- Jaar-filter -->
+    <div class="card" style="padding:0.75rem 1.25rem;">
+      <label style="margin:0;display:inline;font-size:13px;color:#666;">Jaar:&nbsp;</label>
+      <select id="dash-year" style="width:auto;display:inline;padding:4px 8px;font-size:13px;" onchange="dashYearChanged()">
+        <option value="">Alle jaren</option>
+      </select>
+    </div>
+
+    <!-- Blok 1: Uitgaven & besparen -->
     <div class="card">
-      <strong>Schijf van Vijf (aandeel uitgaven)</strong>
-      <canvas id="dash-s5" height="160"></canvas>
-      <div id="dash-fresh" style="font-size:13px;color:#444;margin-top:6px;"></div>
+      <strong>Uitgaven &amp; besparen</strong>
+      <div id="dash-kpis" style="display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;"><div class="empty">Laden...</div></div>
+      <div style="margin-top:14px;">
+        <div style="font-size:12px;color:#888;margin-bottom:4px;">Uitgaven per maand (€)</div>
+        <canvas id="dash-spending" height="160"></canvas>
+      </div>
+      <div style="margin-top:14px;">
+        <div style="font-size:12px;color:#888;margin-bottom:2px;">Trend: producten per bestelling vs. prijs per product</div>
+        <canvas id="dash-trend" height="160"></canvas>
+        <div style="font-size:11px;color:#999;margin-top:4px;">Stijgen de kosten door méér producten of hogere prijs per product?</div>
+      </div>
+      <div style="margin-top:14px;" id="dash-brand-wrap">
+        <div style="font-size:12px;color:#888;margin-bottom:4px;">Merk-aandeel (op productnaam: Picnic = huismerk)</div>
+        <canvas id="dash-brand" height="120"></canvas>
+      </div>
+      <div style="margin-top:14px;" id="dash-top10"></div>
     </div>
-    <div class="card" id="dash-top"></div>
-    <div class="card" id="dash-rhythm"></div>
-    <div class="card" id="dash-insights" style="display:none;">
-      <strong>Inzichten</strong>
-      <div id="dash-insights-body"><div class="empty">Inzichten laden...</div></div>
+
+    <!-- Blok 2: Gewoontes & patronen -->
+    <div class="card">
+      <strong>Gewoontes &amp; patronen</strong>
+      <div id="dash-unique" style="font-size:13px;color:#444;margin-top:8px;"></div>
+      <div style="margin-top:14px;">
+        <div style="font-size:12px;color:#888;margin-bottom:4px;">Bestellingen per weekdag</div>
+        <canvas id="dash-weekday" height="130"></canvas>
+      </div>
+      <div style="margin-top:14px;">
+        <div style="font-size:12px;color:#888;margin-bottom:4px;">Bestellingen per uur</div>
+        <canvas id="dash-hour" height="130"></canvas>
+      </div>
+      <div style="margin-top:14px;">
+        <div style="font-size:12px;color:#888;margin-bottom:4px;">Bestellingen per maand</div>
+        <canvas id="dash-orders-month" height="130"></canvas>
+      </div>
+      <div style="margin-top:14px;" id="dash-core"></div>
     </div>
+
+    <!-- Blok 3: Gezondheid & voeding (indicatie, async) -->
+    <div class="card">
+      <strong>Gezondheid &amp; voeding <span style="font-size:11px;font-weight:400;color:#888;">(indicatie)</span></strong>
+      <div id="dash-cat-status" style="font-size:13px;color:#888;margin-top:8px;">Indeling laden…</div>
+      <div id="dash-cat-wrap" style="display:none;">
+        <div style="margin-top:14px;">
+          <div style="font-size:12px;color:#888;margin-bottom:4px;">Verdeling categorieën (geschat)</div>
+          <canvas id="dash-cat-donut" height="180"></canvas>
+        </div>
+        <div style="margin-top:14px;">
+          <div style="font-size:12px;color:#888;margin-bottom:4px;">Vers vs. snacks/dranken/alcohol over tijd (%)</div>
+          <canvas id="dash-cat-trend" height="130"></canvas>
+        </div>
+      </div>
+      <div style="font-size:11px;color:#999;margin-top:10px;">Indicatie op basis van productnamen (AI-classificatie), geen medisch oordeel.</div>
+    </div>
+
+    <!-- Blok 4: Picnic Wrapped -->
+    <div class="card" id="dash-wrapped">
+      <strong>Picnic Wrapped</strong>
+      <div id="dash-wrapped-body" style="margin-top:10px;"><div class="empty">Laden...</div></div>
+    </div>
+
     <button class="secondary" onclick="addRestock('dashboard')">Vul mijn vaste boodschappen aan</button>
     <div class="status" id="restock-status-dashboard"></div>
   </div>
@@ -216,116 +273,277 @@ const RECEPTEN = {
   ]
 };
 
-let dashChartSpending = null, dashChartS5 = null;
+// ---- Dashboard state & chart refs ----
+let dashData = null; // module-level cache of /api/dashboard response
+let _dcSpending = null, _dcTrend = null, _dcBrand = null;
+let _dcWeekday = null, _dcHour = null, _dcOrdersMonth = null;
+let _dcCatDonut = null, _dcCatTrend = null;
 
-const S5_LABELS = {
-  groente_fruit: 'Groente & fruit', granen: 'Granen', eiwit: 'Eiwit (vlees/vis/vega)',
-  zuivel: 'Zuivel', vetten: 'Vetten', buiten: 'Buiten de schijf',
-};
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function eur(c) { return '€' + (Number(c) / 100).toFixed(2); }
+function destroyChart(ref) { if (ref) { try { ref.destroy(); } catch(_) {} } return null; }
+
+function dashFilteredMonths(byMonth) {
+  const yr = document.getElementById('dash-year') && document.getElementById('dash-year').value;
+  if (!yr) return byMonth;
+  return byMonth.filter(m => m.month && m.month.startsWith(yr));
+}
+
+function dashRenderTimeSeries() {
+  if (!dashData) return;
+  const d = dashData;
+  const months = dashFilteredMonths(d.spending.byMonth || []);
+
+  // Uitgaven per maand
+  _dcSpending = destroyChart(_dcSpending);
+  _dcSpending = new Chart(document.getElementById('dash-spending'), {
+    type: 'bar',
+    data: {
+      labels: months.map(m => m.month),
+      datasets: [{ label: 'Uitgaven (€)', data: months.map(m => (Number(m.totalCents)/100).toFixed(2)), backgroundColor: '#7cb342' }],
+    },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+  });
+
+  // Trend: gem. producten per bestelling & gem. prijs per product
+  const trendLabels = months.map(m => m.month);
+  const trendQty = months.map(m => m.orderCount > 0 ? (Number(m.itemCount) / Number(m.orderCount)).toFixed(1) : 0);
+  const trendPrice = months.map(m => m.itemCount > 0 ? (Number(m.totalCents) / Number(m.itemCount) / 100).toFixed(2) : 0);
+  _dcTrend = destroyChart(_dcTrend);
+  _dcTrend = new Chart(document.getElementById('dash-trend'), {
+    type: 'line',
+    data: {
+      labels: trendLabels,
+      datasets: [
+        { label: 'Prod./bestelling', data: trendQty, borderColor: '#1e88e5', backgroundColor: 'transparent', tension: 0.3, yAxisID: 'y' },
+        { label: 'Prijs/product (€)', data: trendPrice, borderColor: '#fb8c00', backgroundColor: 'transparent', tension: 0.3, yAxisID: 'y2' },
+      ],
+    },
+    options: {
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } },
+      scales: {
+        y: { beginAtZero: true, position: 'left', title: { display: true, text: 'prod.', font: { size: 10 } } },
+        y2: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: '€/prod.', font: { size: 10 } } },
+      },
+    },
+  });
+
+  // Bestellingen per maand (blok 2, respects year filter via timing.byMonthCount)
+  const allTiming = d.timing.byMonthCount || [];
+  const timingMonths = dashFilteredMonths(allTiming);
+  _dcOrdersMonth = destroyChart(_dcOrdersMonth);
+  _dcOrdersMonth = new Chart(document.getElementById('dash-orders-month'), {
+    type: 'bar',
+    data: {
+      labels: timingMonths.map(m => m.month),
+      datasets: [{ label: 'Bestellingen', data: timingMonths.map(m => Number(m.orderCount)), backgroundColor: '#26a69a' }],
+    },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+  });
+}
 
 async function loadDashboard() {
-  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   document.getElementById('dash-kpis').innerHTML = '<div class="empty">Laden...</div>';
+  document.getElementById('dash-wrapped-body').innerHTML = '<div class="empty">Laden...</div>';
+
   try {
-    const res = await fetch(`/api/order-history?auth=${encodeURIComponent(authKey)}`);
-    if (res.status === 401) { document.getElementById('dash-kpis').innerHTML = '<div class="empty error">Sessie verlopen — log opnieuw in.</div>'; return; }
-    const data = await res.json();
-    if (!data.dashboard || data.deliveryCount === 0) {
-      document.getElementById('dash-kpis').innerHTML = '<div class="empty">Nog geen bestellingen gevonden.</div>';
+    const res = await fetch(`/api/dashboard?auth=${encodeURIComponent(authKey)}`);
+    if (res.status === 401) {
+      document.getElementById('dash-kpis').innerHTML = '<div class="empty error">Sessie verlopen — log opnieuw in.</div>';
       return;
     }
-    const d = data.dashboard;
+    const data = await res.json();
+    dashData = data;
 
-    // KPI's
-    const eur = c => '€' + (c/100).toFixed(2);
-    const trend = d.spending.trendPct;
-    const trendStr = trend === 0 ? '—' : (trend > 0 ? `▲ ${trend}%` : `▼ ${Math.abs(trend)}%`);
-    const trendColor = trend > 0 ? '#c62828' : (trend < 0 ? '#2e7d32' : '#888');
+    if (!data || Number(data.deliveryCount) === 0) {
+      document.getElementById('dash-kpis').innerHTML = '<div class="empty">Nog geen bestellingen gevonden.</div>';
+      document.getElementById('dash-wrapped-body').innerHTML = '';
+      return;
+    }
+
+    // ---- Jaar-filter opbouwen ----
+    const years = (data.spending.byYear || []).map(y => y.year).sort((a, b) => b.localeCompare(a));
+    const sel = document.getElementById('dash-year');
+    // bewaar huidige keuze
+    const prevYr = sel.value;
+    sel.innerHTML = '<option value="">Alle jaren</option>' + years.map(y => `<option value="${esc(y)}">${esc(y)}</option>`).join('');
+    if (prevYr && years.includes(prevYr)) sel.value = prevYr;
+
+    // ---- KPI's (all-time) ----
+    const sp = data.spending;
     document.getElementById('dash-kpis').innerHTML = `
-      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-        <div><div style="font-size:12px;color:#888;">Deze maand (lopend)</div><div style="font-size:20px;font-weight:600;">${eur(d.spending.totalThisMonthCents)}</div></div>
-        <div><div style="font-size:12px;color:#888;">Gemiddelde mand</div><div style="font-size:20px;font-weight:600;">${eur(d.spending.avgBasketCents)}</div></div>
-        <div><div style="font-size:12px;color:#888;">Maandtrend</div><div style="font-size:20px;font-weight:600;color:${trendColor};" title="laatste twee afgeronde maanden">${trendStr}</div></div>
-      </div>`;
+      <div style="flex:1;min-width:120px;"><div style="font-size:12px;color:#888;">Totale uitgaven</div><div style="font-size:20px;font-weight:600;">${eur(sp.totalCents)}</div></div>
+      <div style="flex:1;min-width:120px;"><div style="font-size:12px;color:#888;">Gemiddeld per bestelling</div><div style="font-size:20px;font-weight:600;">${eur(sp.avgOrderCents)}</div></div>
+      <div style="flex:1;min-width:120px;"><div style="font-size:12px;color:#888;">Bestellingen</div><div style="font-size:20px;font-weight:600;">${Number(data.deliveryCount)}</div></div>`;
 
-    // Uitgaven-grafiek (per maand)
-    if (dashChartSpending) dashChartSpending.destroy();
-    dashChartSpending = new Chart(document.getElementById('dash-spending'), {
-      type: 'bar',
+    // ---- Tijdreeks grafieken (respects year filter) ----
+    dashRenderTimeSeries();
+
+    // ---- Merk-aandeel (all-time) ----
+    const br = data.brand || {};
+    _dcBrand = destroyChart(_dcBrand);
+    _dcBrand = new Chart(document.getElementById('dash-brand'), {
+      type: 'doughnut',
       data: {
-        labels: d.spending.byMonth.map(m => m.month),
-        datasets: [{ label: 'Uitgaven (€)', data: d.spending.byMonth.map(m => (m.totalCents/100).toFixed(2)), backgroundColor: '#7cb342' }],
+        labels: ['Huismerk (Picnic)', 'A-merk'],
+        datasets: [{ data: [Number(br.huismerkCents) || 0, Number(br.amerkCents) || 0], backgroundColor: ['#7cb342', '#e0e0e0'] }],
       },
-      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+      options: {
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+          tooltip: { callbacks: { label: ctx => ` ${eur(ctx.raw * 100)} (${ctx.label})` } },
+        },
+      },
+    });
+    // fix tooltip: data is already in cents
+    _dcBrand.destroy();
+    _dcBrand = new Chart(document.getElementById('dash-brand'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Huismerk (Picnic)', 'A-merk'],
+        datasets: [{ data: [Number(br.huismerkCents) || 0, Number(br.amerkCents) || 0], backgroundColor: ['#7cb342', '#e0e0e0'] }],
+      },
+      options: {
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+          tooltip: { callbacks: { label: ctx => ` ${eur(ctx.raw)} · ${esc(ctx.label)}` } },
+        },
+      },
     });
 
-    // S5-donut: async geclassificeerd (Haiku, gecachet) zodat het de rest niet ophoudt
-    document.getElementById('dash-fresh').textContent = 'Producten indelen…';
-    loadS5(d.products);
+    // ---- Top 10 producten (all-time) ----
+    const top = (data.topSpend || []).slice(0, 10);
+    document.getElementById('dash-top10').innerHTML = top.length
+      ? `<div style="font-size:12px;color:#888;margin-bottom:4px;">Top 10 producten naar besteding</div>` +
+        top.map((p, i) => `<div style="font-size:13px;display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f5f5f5;">
+          <span>${i+1}. ${esc(p.name)}</span><span style="color:#666;">${eur(p.spendCents)} <span style="color:#bbb;">×${Number(p.count)}</span></span></div>`).join('')
+      : '';
 
-    // Top-producten
-    document.getElementById('dash-top').innerHTML = `
-      <strong>Top-producten</strong>
-      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;">
-        <div style="flex:1;min-width:140px;"><div style="font-size:12px;color:#888;">Meest besteld</div>
-          ${d.topProducts.byCount.map(p => `<div style="font-size:13px;">${esc(p.name)} <span style="color:#999;">×${p.count}</span></div>`).join('') || '<div class="empty">—</div>'}</div>
-        <div style="flex:1;min-width:140px;"><div style="font-size:12px;color:#888;">Grootste uitgaven</div>
-          ${d.topProducts.bySpend.map(p => `<div style="font-size:13px;">${esc(p.name)} <span style="color:#999;">${eur(p.spendCents)}</span></div>`).join('') || '<div class="empty">—</div>'}</div>
+    // ---- Unieke producten ----
+    document.getElementById('dash-unique').textContent = `Unieke producten besteld: ${Number(data.uniqueProducts)}`;
+
+    // ---- Weekdag-grafiek ----
+    const wdLabels = ['Ma','Di','Wo','Do','Vr','Za','Zo'];
+    _dcWeekday = destroyChart(_dcWeekday);
+    _dcWeekday = new Chart(document.getElementById('dash-weekday'), {
+      type: 'bar',
+      data: {
+        labels: wdLabels,
+        datasets: [{ label: 'Bestellingen', data: data.timing.byWeekday || [], backgroundColor: '#5c6bc0' }],
+      },
+      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+    });
+
+    // ---- Uur-grafiek ----
+    _dcHour = destroyChart(_dcHour);
+    _dcHour = new Chart(document.getElementById('dash-hour'), {
+      type: 'bar',
+      data: {
+        labels: Array.from({length:24}, (_,i) => String(i).padStart(2,'0')+'u'),
+        datasets: [{ label: 'Bestellingen', data: data.timing.byHour || [], backgroundColor: '#ab47bc' }],
+      },
+      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+    });
+
+    // ---- Vaste kern ----
+    const core = (data.core || []).slice(0, 15);
+    document.getElementById('dash-core').innerHTML = core.length
+      ? `<div style="font-size:12px;color:#888;margin-bottom:4px;">Vaste kern (aanwezig in % van bestellingen)</div>` +
+        core.map(p => `<div style="font-size:13px;display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid #f5f5f5;">
+          <span>${esc(p.name)}</span>
+          <span style="color:#888;">${Number(p.frequencyPct).toFixed(0)}% <span style="color:#bbb;">×${Number(p.usualQty)}</span></span></div>`).join('')
+      : '';
+
+    // ---- Blok 4: Picnic Wrapped ----
+    const w = data.wrapped || {};
+    const mb = w.mostBought;
+    document.getElementById('dash-wrapped-body').innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;gap:10px;">
+        ${mb ? `<div style="flex:1;min-width:130px;background:#f9f9f9;border-radius:8px;padding:10px;">
+          <div style="font-size:11px;color:#888;">Meest gekocht</div>
+          <div style="font-size:16px;font-weight:600;">${esc(mb.name)}</div>
+          <div style="font-size:12px;color:#666;">×${Number(mb.count)} keer</div></div>` : ''}
+        <div style="flex:1;min-width:130px;background:#f9f9f9;border-radius:8px;padding:10px;">
+          <div style="font-size:11px;color:#888;">Duurste bestelling</div>
+          <div style="font-size:16px;font-weight:600;">${eur(w.mostExpensiveOrderCents || 0)}</div></div>
+        <div style="flex:1;min-width:130px;background:#f9f9f9;border-radius:8px;padding:10px;">
+          <div style="font-size:11px;color:#888;">Totaal bestellingen</div>
+          <div style="font-size:16px;font-weight:600;">${Number(w.totalOrders || 0)}</div></div>
+        <div style="flex:1;min-width:130px;background:#f9f9f9;border-radius:8px;padding:10px;">
+          <div style="font-size:11px;color:#888;">Totaal pakketten</div>
+          <div style="font-size:16px;font-weight:600;">${Number(w.totalParcels || 0)}</div></div>
+        ${Number(w.koffie) > 0 ? `<div style="flex:1;min-width:130px;background:#fff8e1;border-radius:8px;padding:10px;">
+          <div style="font-size:11px;color:#888;">Koffie (op naam)</div>
+          <div style="font-size:16px;font-weight:600;">≈ ${Number(w.koffie)} pakken</div></div>` : ''}
+        ${Number(w.melk) > 0 ? `<div style="flex:1;min-width:130px;background:#e8f5e9;border-radius:8px;padding:10px;">
+          <div style="font-size:11px;color:#888;">Melk (op naam)</div>
+          <div style="font-size:16px;font-weight:600;">≈ ${Number(w.melk)} pakken</div></div>` : ''}
       </div>`;
 
-    // Ritme
-    document.getElementById('dash-rhythm').innerHTML = `
-      <strong>Bestelritme</strong>
-      <div style="font-size:13px;color:#444;margin-top:6px;">
-        Gemiddeld elke <b>${esc(d.rhythm.avgDaysBetween)}</b> dagen · <b>${esc(d.rhythm.avgItemsPerOrder)}</b> producten per bestelling · <b>${esc(d.rhythm.orderCount)}</b> bestellingen
-      </div>`;
+    // ---- Blok 3 async (classify-cat) ----
+    loadCategory();
 
-    loadInsights({ spending: d.spending, topProducts: d.topProducts, rhythm: d.rhythm });
   } catch (e) {
-    document.getElementById('dash-kpis').innerHTML = '<div class="empty error">Fout: ' + esc(e.message) + '</div>';
+    document.getElementById('dash-kpis').innerHTML = `<div class="empty error">Fout: ${esc(e.message)}</div>`;
   }
 }
 
-async function loadS5(products) {
+function dashYearChanged() {
+  dashRenderTimeSeries();
+}
+
+async function loadCategory() {
+  const statusEl = document.getElementById('dash-cat-status');
+  const wrapEl = document.getElementById('dash-cat-wrap');
+  statusEl.textContent = 'Indeling laden…';
+  wrapEl.style.display = 'none';
   try {
-    const res = await fetch('/api/classify-s5', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ products: products || [] }),
+    const res = await fetch(`/api/classify-cat?auth=${encodeURIComponent(authKey)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
     });
+    if (res.status === 401) { statusEl.textContent = 'Sessie verlopen.'; return; }
     const data = await res.json();
-    const s5 = data.s5 || { shares: {}, freshPct: 0 };
-    const buckets = Object.keys(S5_LABELS);
-    if (dashChartS5) dashChartS5.destroy();
-    dashChartS5 = new Chart(document.getElementById('dash-s5'), {
+    const cat = data.category || {};
+    const shares = cat.shares || {};
+    const bucketLabels = { vers: 'Vers', zuivel: 'Zuivel', dranken: 'Dranken', snacks: 'Snacks', alcohol: 'Alcohol', non_food: 'Non-food', overig: 'Overig' };
+    const buckets = Object.keys(bucketLabels);
+    const vals = buckets.map(b => Number(shares[b] || 0));
+    if (vals.every(v => v === 0)) { statusEl.textContent = 'Indeling niet beschikbaar'; return; }
+
+    statusEl.textContent = '';
+    wrapEl.style.display = 'block';
+
+    _dcCatDonut = destroyChart(_dcCatDonut);
+    _dcCatDonut = new Chart(document.getElementById('dash-cat-donut'), {
       type: 'doughnut',
       data: {
-        labels: buckets.map(b => S5_LABELS[b]),
-        datasets: [{ data: buckets.map(b => (s5.shares[b] || 0)), backgroundColor: ['#43a047','#c0ca33','#e53935','#1e88e5','#fb8c00','#9e9e9e'] }],
+        labels: buckets.map(b => bucketLabels[b]),
+        datasets: [{ data: vals, backgroundColor: ['#43a047','#1e88e5','#039be5','#fb8c00','#e53935','#9e9e9e','#bdbdbd'] }],
       },
       options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } },
     });
-    document.getElementById('dash-fresh').textContent = `Groente & fruit: ${s5.freshPct || 0}% van je uitgaven`;
-  } catch (_) {
-    document.getElementById('dash-fresh').textContent = 'Indeling niet beschikbaar';
-  }
-}
 
-async function loadInsights(dashboard) {
-  const box = document.getElementById('dash-insights');
-  const body = document.getElementById('dash-insights-body');
-  box.style.display = 'block';
-  body.innerHTML = '<div class="empty">Inzichten laden...</div>';
-  try {
-    const res = await fetch('/api/insights', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dashboard }),
-    });
-    const data = await res.json();
-    const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    if (!data.insights || data.insights.length === 0) { box.style.display = 'none'; return; }
-    body.innerHTML = data.insights.map(i => `<div style="font-size:13px;color:#444;margin-top:4px;">💡 ${esc(i)}</div>`).join('');
+    const monthly = data.monthly || [];
+    if (monthly.length > 0) {
+      _dcCatTrend = destroyChart(_dcCatTrend);
+      _dcCatTrend = new Chart(document.getElementById('dash-cat-trend'), {
+        type: 'line',
+        data: {
+          labels: monthly.map(m => m.month),
+          datasets: [
+            { label: 'Vers (%)', data: monthly.map(m => Number(m.freshPct || 0).toFixed(1)), borderColor: '#43a047', backgroundColor: 'transparent', tension: 0.3 },
+            { label: 'Snacks/dranken/alc (%)', data: monthly.map(m => Number(m.treatPct || 0).toFixed(1)), borderColor: '#fb8c00', backgroundColor: 'transparent', tension: 0.3 },
+          ],
+        },
+        options: {
+          plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } },
+          scales: { y: { beginAtZero: true, max: 100 } },
+        },
+      });
+    }
   } catch (_) {
-    box.style.display = 'none'; // niet-kritisch
+    document.getElementById('dash-cat-status').textContent = 'Indeling niet beschikbaar';
+    document.getElementById('dash-cat-wrap').style.display = 'none';
   }
 }
 
