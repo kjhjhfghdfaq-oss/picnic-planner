@@ -1,37 +1,30 @@
 'use strict';
-// TIJDELIJK diagnose-endpoint voor de voorspelling. Toont per vast product de recente SKU
-// en wat de zoekopdracht op naam teruggeeft, plus de huidige mand. Wordt verwijderd zodra
-// de voorspelling werkt.
-const { getNormalizedDeliveries } = require('./_lib/orders');
-const { stapleProducts } = require('./_lib/analyze');
+// TIJDELIJK, licht diagnose-endpoint: doet ALLEEN één zoekopdracht + haalt de mand op.
+// Geen historie-ophaal (anders timeout). Verwijderd zodra de voorspelling werkt.
 const { picnicRequest } = require('./_lib/picnic');
-const { searchTopProduct } = require('./_lib/search');
+const { collectSellingUnits } = require('./_lib/search');
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
   const auth = req.query.auth;
   if (!auth) { res.status(400).json({ error: 'auth ontbreekt' }); return; }
+  const q = req.query.q || 'Picnic water bruisend';
 
   try {
-    const deliveries = await getNormalizedDeliveries(auth);
-    const staples = stapleProducts(deliveries, { minFraction: 0.7 });
-
-    const rows = [];
-    for (const s of staples) {
-      let search = null;
-      try { search = await searchTopProduct(auth, s.name); } catch (e) { search = { error: String(e.message || e).slice(0, 120) }; }
-      rows.push({ name: s.name, recentSku: s.productId, usualQty: s.usualQty, freq: s.frequencyPct, search });
-    }
+    const r = await picnicRequest({
+      method: 'GET',
+      path: `/pages/search-page-results?search_term=${encodeURIComponent(q)}`,
+      auth,
+    });
+    const out = [];
+    collectSellingUnits(r.json, out);
 
     const cart = await picnicRequest({ method: 'GET', path: '/cart', auth });
-    const cartNames = (cart.json?.items || []).map(line => {
-      const art = (line.items && line.items[0]) || {};
-      return art.name || line.id;
-    });
+    const cartNames = (cart.json?.items || []).map(l => (l.items && l.items[0] && l.items[0].name) || l.id);
 
-    res.status(200).json({ stapleCount: staples.length, rows, cartNames });
+    res.status(200).json({ q, searchStatus: r.status, resultCount: out.length, results: out.slice(0, 10), cartNames });
   } catch (err) {
-    res.status(500).json({ error: String(err.message || err).slice(0, 200), status: err.status });
+    res.status(500).json({ error: String(err.message || err).slice(0, 200) });
   }
 };
