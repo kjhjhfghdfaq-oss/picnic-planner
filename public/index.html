@@ -340,17 +340,21 @@ async function addRestock(where) {
     const res = await fetch(`/api/predict-restock?auth=${encodeURIComponent(authKey)}`, { method: 'POST' });
     if (res.status === 401) { setStatus(statusId, 'Sessie verlopen — log opnieuw in.', 'error'); return; }
     const data = await res.json();
-    if (!data.added || data.added.length === 0) {
-      setStatus(statusId, 'Niets toe te voegen — je vaste producten staan al in de mand of er is te weinig historie.', '');
-      return;
-    }
-    // markeer auto-toegevoegde producten lokaal (voor badge + undo)
-    const ids = loadAutoAdded();
-    for (const pid of data.productIds) if (!ids.includes(pid)) ids.push(pid);
-    saveAutoAdded(ids);
+    const added = data.added || [];
+    const alInMand = (data.skipped || []).filter(s => s.reason === 'al in mand').map(s => s.name);
 
-    const summary = data.added.map(a => `${a.name} ×${a.count}`).join(', ');
-    setStatus(statusId, 'Toegevoegd: ' + summary, 'success');
+    // markeer auto-toegevoegde producten lokaal (voor badge + undo)
+    if (added.length) {
+      const ids = loadAutoAdded();
+      for (const pid of data.productIds) if (!ids.includes(pid)) ids.push(pid);
+      saveAutoAdded(ids);
+    }
+
+    const parts = [];
+    if (added.length) parts.push('Toegevoegd: ' + added.map(a => `${a.name} ×${a.count}`).join(', '));
+    if (alInMand.length) parts.push('Al in mand (overgeslagen): ' + alInMand.join(', '));
+    if (parts.length === 0) parts.push('Niets toe te voegen — te weinig historie voor vaste producten.');
+    setStatus(statusId, parts.join(' · '), added.length ? 'success' : '');
     if (where === 'cart') loadCart();
   } catch (e) {
     setStatus(statusId, 'Fout: ' + e.message, 'error');
