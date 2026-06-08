@@ -1,45 +1,5 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { mapCategoryToS5, S5_BUCKETS } = require('../api/_lib/analyze');
-
-test('mapCategoryToS5 plaatst groente en fruit in groente_fruit', () => {
-  assert.strictEqual(mapCategoryToS5('Groente'), 'groente_fruit');
-  assert.strictEqual(mapCategoryToS5('Verse fruit'), 'groente_fruit');
-});
-
-test('mapCategoryToS5 plaatst brood en pasta in granen', () => {
-  assert.strictEqual(mapCategoryToS5('Brood & gebak'), 'granen');
-  assert.strictEqual(mapCategoryToS5('Pasta en rijst'), 'granen');
-});
-
-test('mapCategoryToS5 plaatst vlees, vis en vega in eiwit', () => {
-  assert.strictEqual(mapCategoryToS5('Vlees'), 'eiwit');
-  assert.strictEqual(mapCategoryToS5('Vis & zeevruchten'), 'eiwit');
-  assert.strictEqual(mapCategoryToS5('Vegetarisch & vegan'), 'eiwit');
-});
-
-test('mapCategoryToS5 plaatst zuivel in zuivel', () => {
-  assert.strictEqual(mapCategoryToS5('Zuivel & eieren'), 'zuivel');
-});
-
-test('mapCategoryToS5 plaatst olie en boter in vetten', () => {
-  assert.strictEqual(mapCategoryToS5('Olie & azijn'), 'vetten');
-});
-
-test('mapCategoryToS5 valt terug op buiten voor onbekend', () => {
-  assert.strictEqual(mapCategoryToS5('Frisdrank'), 'buiten');
-  assert.strictEqual(mapCategoryToS5(''), 'buiten');
-  assert.strictEqual(mapCategoryToS5(undefined), 'buiten');
-});
-
-test('mapCategoryToS5 matcht niet op deel-substrings', () => {
-  assert.strictEqual(mapCategoryToS5('Conserven & provisies'), 'buiten'); // niet eiwit via "vis"
-  assert.strictEqual(mapCategoryToS5('Reinigingsmiddelen'), 'buiten');    // niet zuivel via "ei"
-});
-
-test('S5_BUCKETS bevat de zes vakken', () => {
-  assert.deepStrictEqual(S5_BUCKETS, ['groente_fruit','granen','eiwit','zuivel','vetten','buiten']);
-});
 
 const { aggregateSpending } = require('../api/_lib/analyze');
 
@@ -128,36 +88,6 @@ test('topProducts respecteert limit en lege input', () => {
   assert.deepStrictEqual(topProducts([], 5), { byCount: [], bySpend: [] });
 });
 
-const { s5Distribution } = require('../api/_lib/analyze');
-
-const S5_FIXTURE = [
-  { id: 'a', date: '2026-05-01T10:00:00.000Z', totalCents: 0, items: [
-    { productId: 'p1', name: 'Appel', count: 1, priceCents: 200, category: 'Groente & fruit' },
-    { productId: 'p2', name: 'Brood', count: 1, priceCents: 200, category: 'Brood & gebak' },
-    { productId: 'p3', name: 'Cola', count: 1, priceCents: 600, category: 'Frisdrank' },
-  ]},
-];
-
-test('s5Distribution berekent uitgaven-aandeel per vak', () => {
-  const r = s5Distribution(S5_FIXTURE);
-  // totaal 1000c: groente_fruit 200 (20%), granen 200 (20%), buiten 600 (60%)
-  assert.strictEqual(r.shares.groente_fruit, 20);
-  assert.strictEqual(r.shares.granen, 20);
-  assert.strictEqual(r.shares.buiten, 60);
-  assert.strictEqual(r.shares.eiwit, 0);
-});
-
-test('s5Distribution geeft vers-aandeel (groente_fruit)', () => {
-  const r = s5Distribution(S5_FIXTURE);
-  assert.strictEqual(r.freshPct, 20);
-});
-
-test('s5Distribution geeft nul-shares bij lege input', () => {
-  const r = s5Distribution([]);
-  assert.strictEqual(r.freshPct, 0);
-  assert.strictEqual(r.shares.groente_fruit, 0);
-});
-
 const { orderRhythm } = require('../api/_lib/analyze');
 
 const RHYTHM_FIXTURE = [
@@ -240,7 +170,7 @@ test('stapleProducts is leeg bij lege input', () => {
   assert.deepStrictEqual(stapleProducts([], { minFraction: 0.7 }), []);
 });
 
-const { productTotals, s5SharesFromProductSpend } = require('../api/_lib/analyze');
+const { productTotals } = require('../api/_lib/analyze');
 
 const TOTALS_FIXTURE = [
   { id: 'a', date: '2026-05-01T10:00:00.000Z', totalCents: 0, items: [
@@ -259,32 +189,6 @@ test('productTotals telt aantal en uitgaven per uniek product', () => {
   assert.deepStrictEqual(p1, { productId: 'p1', name: 'Bruiswater', count: 12, spendCents: 1200 });
   assert.deepStrictEqual(p2, { productId: 'p2', name: 'Melk', count: 2, spendCents: 300 });
   assert.deepStrictEqual(productTotals([]), []);
-});
-
-test('s5SharesFromProductSpend deelt uitgaven in via bucket-map', () => {
-  const products = [
-    { productId: 'p1', spendCents: 200 },
-    { productId: 'p2', spendCents: 200 },
-    { productId: 'p3', spendCents: 600 },
-  ];
-  const map = { p1: 'groente_fruit', p2: 'granen' }; // p3 onbekend => buiten
-  const r = s5SharesFromProductSpend(products, map);
-  assert.strictEqual(r.shares.groente_fruit, 20);
-  assert.strictEqual(r.shares.granen, 20);
-  assert.strictEqual(r.shares.buiten, 60);
-  assert.strictEqual(r.shares.eiwit, 0);
-  assert.strictEqual(r.freshPct, 20);
-});
-
-test('s5SharesFromProductSpend valt ongeldige bucket terug op buiten', () => {
-  const r = s5SharesFromProductSpend([{ productId: 'x', spendCents: 100 }], { x: 'onzin' });
-  assert.strictEqual(r.shares.buiten, 100);
-});
-
-test('s5SharesFromProductSpend leeg => nul', () => {
-  const r = s5SharesFromProductSpend([], {});
-  assert.strictEqual(r.freshPct, 0);
-  assert.strictEqual(r.shares.granen, 0);
 });
 
 // ─── Unit B: nieuwe functies ────────────────────────────────────────────────

@@ -1,31 +1,5 @@
 'use strict';
 
-const S5_BUCKETS = ['groente_fruit', 'granen', 'eiwit', 'zuivel', 'vetten', 'buiten'];
-
-// Volgorde telt: eerste match wint. Trefwoorden zijn lowercase, matchen op substring.
-const S5_KEYWORDS = [
-  ['groente_fruit', ['groente', 'fruit', 'sla', 'salade', 'aardappel']],
-  ['granen', ['brood', 'gebak', 'pasta', 'rijst', 'graan', 'ontbijtgranen', 'meel', 'cracker']],
-  ['eiwit', ['vlees', 'vis', 'zeevruchten', 'kip', 'gehakt', 'vega', 'vegetarisch', 'vegan', 'peulvrucht', 'noten', 'tofu']],
-  ['zuivel', ['zuivel', 'kaas', 'melk', 'yoghurt', 'ei', 'eieren']],
-  ['vetten', ['olie', 'boter', 'margarine', 'azijn', 'vet']],
-];
-
-function mapCategoryToS5(category) {
-  const c = String(category || '').toLowerCase();
-  if (!c) return 'buiten';
-  for (const [bucket, keywords] of S5_KEYWORDS) {
-    if (keywords.some(k => {
-      const i = c.indexOf(k);
-      if (i === -1) return false;
-      const pre = i === 0 || !/\w/.test(c[i - 1]);
-      const post = i + k.length >= c.length || !/\w/.test(c[i + k.length]);
-      return pre && post;
-    })) return bucket;
-  }
-  return 'buiten';
-}
-
 function monthKey(iso) {
   return String(iso).slice(0, 7); // "YYYY-MM"
 }
@@ -82,25 +56,7 @@ function topProducts(deliveries, limit = 5) {
   return { byCount, bySpend };
 }
 
-function s5Distribution(deliveries) {
-  const cents = {};
-  for (const b of S5_BUCKETS) cents[b] = 0;
-  let total = 0;
-  for (const d of deliveries) {
-    for (const it of d.items || []) {
-      const bucket = mapCategoryToS5(it.category);
-      cents[bucket] += it.priceCents || 0;
-      total += it.priceCents || 0;
-    }
-  }
-  const shares = {};
-  for (const b of S5_BUCKETS) {
-    shares[b] = total > 0 ? Math.round((cents[b] / total) * 100) : 0;
-  }
-  return { shares, freshPct: shares.groente_fruit };
-}
-
-// Totaal per uniek product over alle leveringen (voor S5-classificatie + verdeling).
+// Totaal per uniek product over alle leveringen (voor categorie-classificatie + verdeling).
 function productTotals(deliveries) {
   const acc = new Map();
   for (const d of deliveries) {
@@ -113,23 +69,6 @@ function productTotals(deliveries) {
     }
   }
   return [...acc.entries()].map(([productId, v]) => ({ productId, ...v }));
-}
-
-// S5-verdeling op basis van een vooraf bepaalde bucket-map (productId -> S5-vak).
-// products: [{productId, spendCents}]. Onbekende producten vallen in 'buiten'.
-function s5SharesFromProductSpend(products, bucketByProduct) {
-  const cents = {};
-  for (const b of S5_BUCKETS) cents[b] = 0;
-  let total = 0;
-  for (const p of products || []) {
-    const raw = bucketByProduct && bucketByProduct[p.productId];
-    const bucket = S5_BUCKETS.includes(raw) ? raw : 'buiten';
-    cents[bucket] += p.spendCents || 0;
-    total += p.spendCents || 0;
-  }
-  const shares = {};
-  for (const b of S5_BUCKETS) shares[b] = total > 0 ? Math.round((cents[b] / total) * 100) : 0;
-  return { shares, freshPct: shares.groente_fruit };
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -416,8 +355,8 @@ function categoryShares(products, bucketByProduct, buckets) {
 }
 
 module.exports = {
-  S5_BUCKETS, mapCategoryToS5, aggregateSpending,
-  topProducts, s5Distribution, productTotals, s5SharesFromProductSpend,
+  aggregateSpending,
+  topProducts, productTotals,
   orderRhythm, stapleProducts,
   // Dashboard 2.0
   spendingTimeline, brandShare, topBySpend, orderTiming,
