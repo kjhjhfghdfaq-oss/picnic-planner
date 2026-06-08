@@ -6,6 +6,7 @@ const { picnicRequest } = require('./picnic');
 // Afgeronde leveringen worden gecachet, dus dit kost alleen de eerste keer iets.
 const MAX_DETAIL = 24;
 const BATCH = 8;
+const BATCH_ALL = 12;
 
 // Haalt de recente leveringen op, cachet onveranderlijke (afgeronde) leveringen in KV,
 // en geeft de genormaliseerde set terug. Detailcalls draaien parallel in batches.
@@ -22,6 +23,26 @@ async function getNormalizedDeliveries(auth) {
   const deliveries = [];
   for (let i = 0; i < recent.length; i += BATCH) {
     const chunk = recent.slice(i, i + BATCH);
+    const settled = await Promise.all(chunk.map(entry => loadOne(entry, auth)));
+    deliveries.push(...settled.filter(Boolean));
+  }
+  return deliveries;
+}
+
+// Haalt ALLE leveringen op (geen cap), detail parallel in batches van 12, cache-first.
+// Gebruikt voor het dashboard; predict-restock gebruikt nog getNormalizedDeliveries.
+async function getAllDeliveries(auth) {
+  const summary = await picnicRequest({ method: 'POST', path: '/deliveries/summary', auth, body: [] });
+  if (summary.status === 401 || summary.status === 403) {
+    const err = new Error('unauthorized');
+    err.status = summary.status;
+    throw err;
+  }
+  const list = Array.isArray(summary.json) ? summary.json : [];
+
+  const deliveries = [];
+  for (let i = 0; i < list.length; i += BATCH_ALL) {
+    const chunk = list.slice(i, i + BATCH_ALL);
     const settled = await Promise.all(chunk.map(entry => loadOne(entry, auth)));
     deliveries.push(...settled.filter(Boolean));
   }
@@ -68,8 +89,11 @@ function normalizeDelivery(detail, summaryEntry) {
       const qtyDecorator = (art.decorators || []).find(d => d && d.type === 'QUANTITY');
       const count = (qtyDecorator && qtyDecorator.quantity) || articles.length || 1;
       const priceCents = (line.display_price != null ? line.display_price : line.price) || 0;
+      const name = art.name || productId;
       // category komt (nog) niet uit de leveringsdata; S5-verrijking volgt apart.
-      items.push({ productId, name: art.name || productId, count, priceCents, category: '' });
+      // brand: heuristisch op basis van productnaam (expliciet gelabeld als afgeleid).
+      const brand = /^picnic\b/i.test(name) ? 'huismerk' : 'amerk';
+      items.push({ productId, name, count, priceCents, category: '', brand });
     }
   }
 
@@ -78,7 +102,9 @@ function normalizeDelivery(detail, summaryEntry) {
     .reduce((s, o) => s + (o.total_price || 0), 0);
   const totalCents = summaryTotal || items.reduce((s, l) => s + l.priceCents, 0);
 
-  return { id, date, totalCents, items };
+  const parcels = Array.isArray(detail.parcels) ? detail.parcels.length : 0;
+
+  return { id, date, totalCents, parcels, items };
 }
 
-module.exports = { getNormalizedDeliveries };
+module.exports = { getNormalizedDeliveries, getAllDeliveries };
