@@ -49,10 +49,16 @@ module.exports = async (req, res) => {
     };
     const inCart = (entries, name) => entries.some(e => namesMatch(e.name, name));
     const idFor = (entries, name) => { const m = entries.find(e => namesMatch(e.name, name)); return m && m.id; };
-    const addProduct = (id, count) => picnicRequest({
-      method: 'POST', path: '/cart/add_product', auth,
-      body: { product_id: id, count: Math.max(1, count) },
-    });
+    // Picnic's add_product voegt per call 1 stuk toe — de 'count' in de body wordt in deze
+    // API-versie genegeerd. Daarom herhaald aanroepen tot het gewenste aantal (cap 24).
+    const addProduct = async (id, count) => {
+      const n = Math.min(Math.max(1, count), 24);
+      let last;
+      for (let i = 0; i < n; i++) {
+        last = await picnicRequest({ method: 'POST', path: '/cart/add_product', auth, body: { product_id: id, count: 1 } });
+      }
+      return last;
+    };
 
     const before = await getCart();
     if (!before) { res.status(502).json({ error: 'Mand ophalen mislukt' }); return; }
